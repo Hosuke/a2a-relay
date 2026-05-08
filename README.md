@@ -99,6 +99,26 @@ python -m a2a_relay --base /root/agent-mailbox watch \
   --ack
 ```
 
+Run a safe receipt watcher without dispatching:
+
+```bash
+python -m a2a_relay --base /root/agent-mailbox receipt \
+  --agent lulu \
+  --allow-from possum \
+  --once \
+  --json
+```
+
+`receipt` claims incoming messages, validates schema and sender policy, writes
+receipt events, and archives low-risk `note`, `status`, `reply`, and
+`heartbeat` messages. `request` messages are left in `processing/<agent>/` for
+human handling by default; use `--archive-requests-too` only for smoke tests.
+Messages with `human_approval_required=true` are always queued in `processing/`.
+Use `--recover-processing` after watcher restarts to re-report or finish
+messages that were already claimed before a crash. The receipt watcher does not
+execute message bodies, run subprocesses, call
+Hermes, or send recursive ACK/status messages.
+
 ## Private contacts
 
 A2A Relay is a private contact model, not group chat. As more agents join, add

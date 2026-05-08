@@ -17,6 +17,7 @@ from .core import (
     init_mailbox,
     list_messages,
     load_contacts,
+    processing_dir,
     log_event,
     make_message,
     mark_seen,
@@ -28,6 +29,9 @@ from .core import (
     validate_message,
 )
 from .dispatcher import dispatch_message
+
+RECEIPT_ARCHIVE_TYPES = {"note", "status", "reply", "heartbeat"}
+RECEIPT_DEFAULT_TYPES = sorted(RECEIPT_ARCHIVE_TYPES | {"request"})
 
 
 def cmd_init(args):
@@ -145,6 +149,88 @@ def poll_once(args):
 
 def cmd_poll(args):
     print(json.dumps({"count": len(results := poll_once(args)), "results": results}, ensure_ascii=False, indent=2))
+
+
+def _handle_receipt_message(args, base: Path, agent: str, path: Path) -> dict:
+    config = _config_from_args(args)
+    msg = None
+    try:
+        msg = read_message(path)
+        validate_message(msg, config=config)
+        if msg.get("to") != agent:
+            raise ValidationError(f"target mismatch: {msg.get('to')} != {agent}")
+        if has_seen(base, msg):
+            archive = archive_message(base, path, ok=True, message_id=msg.get("id"))
+            log_event(base, "duplicate", message=msg, actor=agent, path=str(archive))
+            return {"path": str(path), "ok": True, "duplicate": True, "archive": str(archive), "message_id": msg.get("id"), "from": msg.get("from"), "to": msg.get("to"), "type": msg.get("type"), "subject": msg.get("subject"), "thread_id": msg.get("thread_id")}
+
+        log_event(base, "received", message=msg, actor=agent, path=str(path))
+        result = {"path": str(path), "ok": True, "message_id": msg.get("id"), "from": msg.get("from"), "to": msg.get("to"), "type": msg.get("type"), "subject": msg.get("subject"), "thread_id": msg.get("thread_id")}
+
+        if msg.get("human_approval_required", False):
+            log_event(base, "receipt_queued_for_human", message=msg, actor=agent, reason="human_approval_required", path=str(path))
+            result["queued_for_human"] = True
+            result["reason"] = "human_approval_required"
+            return result
+
+        msg_type = msg.get("type")
+        if msg_type == "request" and not args.archive_requests_too:
+            log_event(base, "receipt_queued_for_human", message=msg, actor=agent, reason="request_requires_human", path=str(path))
+            result["queued_for_human"] = True
+            result["reason"] = "request_requires_human"
+            return result
+
+        if msg_type not in RECEIPT_ARCHIVE_TYPES and not (msg_type == "request" and args.archive_requests_too):
+            raise ValidationError(f"message type not receipt-archivable: {msg_type}")
+
+        mark_seen(base, msg, actor=agent)
+        log_event(base, "receipt_logged", message=msg, actor=agent, path=str(path))
+        archive = archive_message(base, path, ok=True, message_id=msg.get("id"))
+        log_event(base, "archived", message=msg, actor=agent, path=str(archive))
+        result["archive"] = str(archive)
+        return result
+    except Exception as exc:
+        try:
+            archive = archive_message(base, path, ok=False, message_id=(msg or {}).get("id") if isinstance(msg, dict) else None)
+        except Exception:
+            archive = path
+        log_event(base, "failed", message=msg if isinstance(msg, dict) else None, actor=agent, reason=repr(exc), path=str(archive))
+        return {"path": str(path), "ok": False, "error": repr(exc), "archive": str(archive)}
+
+
+def receipt_once(args):
+    base = Path(args.base)
+    agent = resolve_agent(base, args.agent)
+    results = []
+    for inbox_path in list_messages(base, agent):
+        path = claim_message(base, agent, inbox_path)
+        if path is None:
+            continue
+        results.append(_handle_receipt_message(args, base, agent, path))
+    if getattr(args, "recover_processing", False):
+        for path in sorted(processing_dir(base, agent).glob("*.json")):
+            results.append(_handle_receipt_message(args, base, agent, path))
+    return results
+
+
+def _print_receipt_results(results: list[dict], *, json_output: bool) -> None:
+    if json_output:
+        print(json.dumps({"count": len(results), "results": results}, ensure_ascii=False, indent=2))
+        return
+    for item in results:
+        status = "ok" if item.get("ok") else "failed"
+        action = "queued" if item.get("queued_for_human") else "archived" if item.get("archive") else "claimed"
+        print(f"{status} {action} {item.get('message_id') or item.get('path')} from={item.get('from')} type={item.get('type')} subject={item.get('subject')}")
+
+
+def cmd_receipt(args):
+    while True:
+        results = receipt_once(args)
+        if results or args.once:
+            _print_receipt_results(results, json_output=args.json)
+        if args.once:
+            return
+        time.sleep(args.interval)
 
 
 def cmd_watch(args):
@@ -328,6 +414,18 @@ def build_parser():
     s.add_argument("--max-body-chars", type=int, default=20000)
     s.add_argument("--ack", action="store_true")
     s.set_defaults(func=cmd_dispatch)
+
+    s = sub.add_parser("receipt", aliases=["watch-receipts"])
+    s.add_argument("--agent", required=True)
+    s.add_argument("--allow-from", action="append", required=True)
+    s.add_argument("--allowed-type", action="append", default=RECEIPT_DEFAULT_TYPES)
+    s.add_argument("--max-body-chars", type=int, default=20000)
+    s.add_argument("--archive-requests-too", action="store_true")
+    s.add_argument("--recover-processing", action="store_true")
+    s.add_argument("--once", action="store_true")
+    s.add_argument("--interval", type=float, default=10.0)
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(func=cmd_receipt)
 
     s = sub.add_parser("pending")
     s.add_argument("--agent", required=True)
