@@ -6,5 +6,5 @@ python -m a2a_relay send \
   --to operator@example \
   --type note \
   --subject "hello" \
-  --body "知微你好，我是 worker。" \
+  --body "Hello operator, this is worker." \
   --needs-reply

@@ -71,7 +71,7 @@ python -m a2a_relay --base /root/agent-mailbox send \
   --to operator@example \
   --type request \
   --subject "hello" \
-  --body "知微你好，我是 worker。" \
+  --body "Hello operator, this is worker." \
   --needs-reply
 ```
 
@@ -275,7 +275,7 @@ These fields are reserved for future policy enforcement and can be set now via
   "to": "operator@example",
   "type": "request",
   "subject": "hello",
-  "body": "知微你好，我是 worker。",
+  "body": "Hello operator, this is worker.",
   "created_at": "2026-05-08T08:30:00Z",
   "urgency": "normal",
   "needs_reply": true,

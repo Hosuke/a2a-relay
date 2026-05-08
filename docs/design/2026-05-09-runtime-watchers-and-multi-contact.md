@@ -65,8 +65,8 @@ It does not run terminal/file tools unless explicitly allowed by local policy.
 Suggested command shape:
 
 ```bash
-agent-runner --profile worker chat -q '<fixed prompt with <a2a_message>...</a2a_message>>' \
-  --toolsets session_search,skills -Q
+local-agent-runner --profile worker --mode draft-reply \
+  --input-file /path/to/claimed-message.json
 ```
 
 This is for worker after Level 1 is stable.
