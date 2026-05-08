@@ -1,0 +1,24 @@
+[Unit]
+Description=A2A Relay watcher for %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Override these in a drop-in or EnvironmentFile for your deployment.
+Environment=A2A_BASE=/root/agent-mailbox
+Environment=A2A_ALLOW_FROM=lulu@kamac
+WorkingDirectory=/root/a2a-relay
+ExecStart=/usr/bin/python3 -m a2a_relay --base ${A2A_BASE} watch --agent %i --allow-from ${A2A_ALLOW_FROM} --interval 10 --ack
+Restart=always
+RestartSec=5
+UMask=0077
+
+# Hardening knobs. Some may need adjustment depending on mailbox path.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target
