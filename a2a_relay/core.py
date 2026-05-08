@@ -292,13 +292,6 @@ def resolve_agent(base: Path, target: str) -> str:
             raise  # ambiguous — always fatal
         if not has_contacts_file:
             return target  # backward compat for old mailboxes
-        agents_file = base / "agents.json"
-        if agents_file.exists():
-            agents_data = json.loads(agents_file.read_text(encoding="utf-8"))
-            if target in agents_data.get("agents", {}):
-                return target
-        if inbox_dir(base, target).exists() or processing_dir(base, target).exists():
-            return target
         raise
 
 

@@ -98,6 +98,19 @@ class A2ARelayContactsCLITest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("unknown contact", result.stderr)
 
+    def test_existing_agent_not_in_contacts_fails_when_contacts_json_exists(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "mailbox"
+            run_cli(base, "init", "--agent", "alice@x")
+            contacts_file = base / "contacts.json"
+            data = json.loads(contacts_file.read_text(encoding="utf-8"))
+            del data["contacts"]["alice@x"]
+            contacts_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            result = run_cli(base, "send", "--from", "alice@x", "--to", "alice@x",
+                             "--subject", "test", "--body", "test", check=False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unknown contact", result.stderr)
+
     def test_display_name_conflict_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
