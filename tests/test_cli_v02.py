@@ -26,6 +26,69 @@ def load_json(stdout: str) -> dict:
 
 
 class A2ARelayV02CLITest(unittest.TestCase):
+    def test_task_send_creates_policy_bounded_request(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "mailbox"
+            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lancha@macmini")
+
+            sent = run_cli(
+                base,
+                "task",
+                "send",
+                "--from", "zhiwei@known-blocks1",
+                "--to", "lancha@macmini",
+                "--title", "Check local database reachability",
+                "--context", "Known symptom: timeout from public host.",
+                "--constraint", "Read-only checks only.",
+                "--require-output", "summary",
+                "--require-output", "commands run",
+                "--capability", "terminal",
+                "--capability", "database_read",
+                "--profile", "read-only-fast",
+                "--approval-required",
+            )
+            msg_path = Path(sent.stdout.strip())
+            msg = json.loads(msg_path.read_text(encoding="utf-8"))
+
+            self.assertEqual(msg["type"], "request")
+            self.assertTrue(msg["needs_reply"])
+            self.assertTrue(msg["human_approval_required"])
+            self.assertEqual(msg["capabilities_requested"], ["terminal", "database_read"])
+            self.assertIn("task_zhiwei_known-blocks1_to_lancha_macmini", msg["thread_id"])
+            self.assertIn("# Task", msg["body"])
+            self.assertIn("## Context", msg["body"])
+            self.assertIn("Known symptom: timeout from public host.", msg["body"])
+            self.assertIn("## Constraints", msg["body"])
+            self.assertIn("Read-only checks only.", msg["body"])
+            self.assertIn("profile: read-only-fast", msg["body"])
+            self.assertIn("human_approval_required: true", msg["body"])
+            self.assertIn("1. summary", msg["body"])
+            self.assertIn("2. commands run", msg["body"])
+
+    def test_task_send_defaults_to_safe_read_only_template(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "mailbox"
+            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lancha@macmini")
+
+            sent = run_cli(
+                base,
+                "task",
+                "send",
+                "--from", "zhiwei@known-blocks1",
+                "--to", "lancha@macmini",
+                "--title", "Inspect service health",
+            )
+            msg = json.loads(Path(sent.stdout.strip()).read_text(encoding="utf-8"))
+
+            self.assertEqual(msg["capabilities_requested"], [])
+            self.assertFalse(msg["human_approval_required"])
+            self.assertTrue(msg["needs_reply"])
+            self.assertIn("No additional context provided.", msg["body"])
+            self.assertIn("Do not make destructive changes.", msg["body"])
+            self.assertIn("Do not expose secrets in the reply.", msg["body"])
+            self.assertIn("If write/restart/delete/migration is needed", msg["body"])
+            self.assertIn("whether human approval is needed", msg["body"])
+
     def test_send_poll_ack_reply_threads(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"

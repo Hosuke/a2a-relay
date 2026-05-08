@@ -26,6 +26,7 @@ from .core import (
     remove_contact,
     resolve_agent,
     resolve_contact,
+    safe_name,
     send_message,
     validate_message,
 )
@@ -80,6 +81,76 @@ def cmd_reply(args):
     )
     path = send_message(base, msg)
     log_event(base, "replied", message=msg.to_json_dict(), actor=sender, extra={"reply_to": reply_to})
+    print(path)
+
+
+def _build_task_body(args) -> str:
+    constraints = args.constraint or [
+        "Do not make destructive changes.",
+        "Do not restart services or modify configuration unless explicitly approved.",
+        "Do not expose secrets in the reply.",
+        "If write/restart/delete/migration is needed, reply with human_approval_required.",
+    ]
+    outputs = args.require_output or [
+        "summary",
+        "commands run",
+        "evidence",
+        "suspected cause",
+        "recommended next action",
+        "whether human approval is needed",
+    ]
+    lines = [
+        "# Task",
+        "",
+        args.title,
+        "",
+        "## Context",
+        "",
+    ]
+    if args.context:
+        for item in args.context:
+            lines.append(f"- {item}")
+    else:
+        lines.append("- No additional context provided.")
+    lines.extend([
+        "",
+        "## Constraints",
+        "",
+        f"- profile: {args.profile}",
+        f"- human_approval_required: {str(args.approval_required).lower()}",
+    ])
+    for item in constraints:
+        lines.append(f"- {item}")
+    lines.extend([
+        "",
+        "## Required output",
+        "",
+    ])
+    for idx, item in enumerate(outputs, start=1):
+        lines.append(f"{idx}. {item}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def cmd_task_send(args):
+    base = Path(args.base)
+    sender = resolve_agent(base, args.from_)
+    recipient = resolve_agent(base, args.to)
+    thread_id = args.thread_id or f"task_{safe_name(sender)}_to_{safe_name(recipient)}_{safe_name(args.title)[:40]}"
+    msg = make_message(
+        sender,
+        recipient,
+        "request",
+        args.title,
+        _build_task_body(args),
+        thread_id=thread_id,
+        urgency=args.urgency,
+        needs_reply=True,
+        idempotency_key=args.idempotency_key,
+    )
+    msg.capabilities_requested = args.capability or []
+    msg.human_approval_required = bool(args.approval_required)
+    path = send_message(base, msg)
     print(path)
 
 
@@ -632,6 +703,23 @@ def build_parser():
     s.add_argument("--body", required=True)
     s.add_argument("--urgency", default="normal", choices=["low", "normal", "high"])
     s.set_defaults(func=cmd_reply)
+
+    task = sub.add_parser("task")
+    task_sub = task.add_subparsers(dest="task_cmd", required=True)
+    s = task_sub.add_parser("send")
+    s.add_argument("--from", dest="from_", required=True)
+    s.add_argument("--to", required=True)
+    s.add_argument("--title", required=True)
+    s.add_argument("--context", action="append")
+    s.add_argument("--constraint", action="append")
+    s.add_argument("--require-output", action="append")
+    s.add_argument("--capability", action="append")
+    s.add_argument("--profile", default="read-only-fast")
+    s.add_argument("--approval-required", action="store_true")
+    s.add_argument("--urgency", default="normal", choices=["low", "normal", "high"])
+    s.add_argument("--thread-id")
+    s.add_argument("--idempotency-key")
+    s.set_defaults(func=cmd_task_send)
 
     for name, func in [("poll", cmd_poll), ("watch", cmd_watch)]:
         s = sub.add_parser(name)
