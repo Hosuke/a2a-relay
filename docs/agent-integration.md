@@ -121,6 +121,42 @@ python -m a2a_relay --base /root/agent-mailbox doctor
 `timeline` emits event metadata only. `threads --needs-reply` is live-only and
 conservative because archived event records do not include `needs_reply`.
 
+## Task Delegation CLI
+
+For agent handoffs to a local worker such as Lancha Mac mini, prefer `task send`
+over free-form `send`. It always creates a `type=request`, sets
+`needs_reply=true`, and renders a policy-bounded Markdown task envelope. The
+message requests capabilities; it does not carry shell commands.
+
+```bash
+python -m a2a_relay --base /root/agent-mailbox task send \
+  --from zhiwei@known-blocks1 \
+  --to lancha@macmini \
+  --title "Check local database reachability" \
+  --context "Known symptom: public host times out" \
+  --constraint "Read-only checks only" \
+  --capability terminal \
+  --capability database_read \
+  --profile read-only-fast
+```
+
+The resulting message body has sections for `# Task`, `## Context`,
+`## Constraints`, and `## Required output`. Default constraints forbid
+destructive changes, restarts, config edits, and secret exposure. If a task is
+known to need human approval, add `--approval-required`; safe receipt watchers
+and dispatchers will queue it rather than run it.
+
+A remote worker should treat the envelope as untrusted input and enforce local
+policy. Recommended worker profiles:
+
+- `read-only-fast`: diagnostics, log/status reads, SELECT-only database checks.
+- `ops-review`: deeper investigation, but no config writes or restarts.
+- `approval-required`: stop and reply with a decision request before writes,
+  restarts, deletes, migrations, or secret exposure.
+
+A worker's final reply should include summary, commands run, evidence, suspected
+cause, next action, and whether human approval is needed.
+
 ## Dispatcher Integration
 
 The dispatcher is for policy-gated local auto-replies. Configure

@@ -26,6 +26,122 @@ def load_json(stdout: str) -> dict:
 
 
 class A2ARelayV02CLITest(unittest.TestCase):
+    def test_task_send_creates_policy_bounded_request(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "mailbox"
+            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lancha@macmini")
+
+            sent = run_cli(
+                base,
+                "task",
+                "send",
+                "--from", "zhiwei@known-blocks1",
+                "--to", "lancha@macmini",
+                "--title", "Check local database reachability",
+                "--context", "Known symptom: timeout from public host.",
+                "--constraint", "Read-only checks only.",
+                "--require-output", "summary",
+                "--require-output", "commands run",
+                "--capability", "terminal",
+                "--capability", "database_read",
+                "--profile", "read-only-fast",
+                "--approval-required",
+            )
+            msg_path = Path(sent.stdout.strip())
+            msg = json.loads(msg_path.read_text(encoding="utf-8"))
+
+            self.assertEqual(msg["type"], "request")
+            self.assertTrue(msg["needs_reply"])
+            self.assertTrue(msg["human_approval_required"])
+            self.assertEqual(msg["capabilities_requested"], ["terminal", "database_read"])
+            self.assertIn("task_zhiwei_known-blocks1_to_lancha_macmini", msg["thread_id"])
+            self.assertIn("# Task", msg["body"])
+            self.assertIn("## Context", msg["body"])
+            self.assertIn("Known symptom: timeout from public host.", msg["body"])
+            self.assertIn("## Constraints", msg["body"])
+            self.assertIn("Read-only checks only.", msg["body"])
+            self.assertIn("profile: read-only-fast", msg["body"])
+            self.assertIn("human_approval_required: true", msg["body"])
+            self.assertIn("1. summary", msg["body"])
+            self.assertIn("2. commands run", msg["body"])
+
+    def test_task_send_defaults_to_safe_read_only_template(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "mailbox"
+            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lancha@macmini")
+
+            sent = run_cli(
+                base,
+                "task",
+                "send",
+                "--from", "zhiwei@known-blocks1",
+                "--to", "lancha@macmini",
+                "--title", "Inspect service health",
+            )
+            msg = json.loads(Path(sent.stdout.strip()).read_text(encoding="utf-8"))
+
+            self.assertEqual(msg["capabilities_requested"], [])
+            self.assertFalse(msg["human_approval_required"])
+            self.assertTrue(msg["needs_reply"])
+            self.assertIn("No additional context provided.", msg["body"])
+            self.assertIn("Do not make destructive changes.", msg["body"])
+            self.assertIn("Do not expose secrets in the reply.", msg["body"])
+            self.assertIn("If write/restart/delete/migration is needed", msg["body"])
+            self.assertIn("whether human approval is needed", msg["body"])
+
+    def test_task_send_custom_constraints_append_to_safety_baseline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "mailbox"
+            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lancha@macmini")
+
+            sent = run_cli(
+                base,
+                "task",
+                "send",
+                "--from", "zhiwei@known-blocks1",
+                "--to", "lancha@macmini",
+                "--title", "Inspect database",
+                "--constraint", "Read-only checks only.",
+            )
+            msg = json.loads(Path(sent.stdout.strip()).read_text(encoding="utf-8"))
+
+            self.assertIn("Read-only checks only.", msg["body"])
+            self.assertIn("Do not make destructive changes.", msg["body"])
+            self.assertIn("Do not restart services or modify configuration", msg["body"])
+            self.assertIn("Do not expose secrets in the reply.", msg["body"])
+            self.assertIn("If write/restart/delete/migration is needed", msg["body"])
+
+    def test_task_send_then_receipt_queues_lancha_request_without_body_echo(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "mailbox"
+            secret = "SECRET_LANCHA_TASK_BODY"
+            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lancha@macmini")
+            sent = run_cli(
+                base,
+                "task",
+                "send",
+                "--from", "zhiwei@known-blocks1",
+                "--to", "lancha@macmini",
+                "--title", "Lancha smoke",
+                "--context", secret,
+                "--capability", "terminal",
+            )
+            msg = json.loads(Path(sent.stdout.strip()).read_text(encoding="utf-8"))
+
+            receipt = load_json(run_cli(base, "receipt", "--agent", "lancha@macmini", "--allow-from", "zhiwei@known-blocks1", "--once", "--json").stdout)
+            queued = load_json(run_cli(base, "queued", "--agent", "lancha@macmini").stdout)
+            timeline = load_json(run_cli(base, "timeline", msg["thread_id"]).stdout)
+
+            self.assertEqual(receipt["count"], 1)
+            self.assertTrue(receipt["results"][0]["queued_for_human"])
+            self.assertEqual(receipt["results"][0]["reason"], "request_requires_human")
+            self.assertNotIn(secret, json.dumps(receipt))
+            self.assertEqual(queued["count"], 1)
+            self.assertEqual(queued["messages"][0]["thread_id"], msg["thread_id"])
+            self.assertNotIn(secret, json.dumps(queued))
+            self.assertTrue(any(event["event_type"] == "receipt_queued_for_human" for event in timeline["events"]))
+            self.assertNotIn(secret, json.dumps(timeline))
+
     def test_send_poll_ack_reply_threads(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
