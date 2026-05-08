@@ -264,25 +264,45 @@ def cmd_dispatch(args):
     print(json.dumps({"count": len(results), "results": results}, ensure_ascii=False, indent=2))
 
 
+def _message_metadata(path: Path, msg: dict) -> dict:
+    return {
+        "path": str(path),
+        "id": msg.get("id"),
+        "from": msg.get("from"),
+        "to": msg.get("to"),
+        "type": msg.get("type"),
+        "subject": msg.get("subject"),
+        "thread_id": msg.get("thread_id"),
+        "needs_reply": msg.get("needs_reply"),
+        "human_approval_required": msg.get("human_approval_required"),
+    }
+
+
+def _list_message_metadata(paths: list[Path]) -> list[dict]:
+    rows = []
+    for path in paths:
+        try:
+            msg = read_message(path)
+            rows.append(_message_metadata(path, msg))
+        except Exception as exc:
+            rows.append({"ok": False, "error": repr(exc), "path": str(path)})
+    return rows
+
+
 def cmd_pending(args):
     base = Path(args.base)
     agent = resolve_agent(base, args.agent)
-    rows = []
-    for path in list_messages(base, agent):
-        try:
-            msg = read_message(path)
-            rows.append({
-                "path": str(path),
-                "id": msg.get("id"),
-                "from": msg.get("from"),
-                "to": msg.get("to"),
-                "type": msg.get("type"),
-                "subject": msg.get("subject"),
-                "thread_id": msg.get("thread_id"),
-                "needs_reply": msg.get("needs_reply"),
-            })
-        except Exception as exc:
-            rows.append({"path": str(path), "error": repr(exc)})
+    paths = list_messages(base, agent)
+    if args.include_processing:
+        paths += sorted(processing_dir(base, agent).glob("*.json"))
+    rows = _list_message_metadata(paths)
+    print(json.dumps({"count": len(rows), "messages": rows}, ensure_ascii=False, indent=2))
+
+
+def cmd_queued(args):
+    base = Path(args.base)
+    agent = resolve_agent(base, args.agent)
+    rows = _list_message_metadata(sorted(processing_dir(base, agent).glob("*.json")))
     print(json.dumps({"count": len(rows), "messages": rows}, ensure_ascii=False, indent=2))
 
 
@@ -429,7 +449,12 @@ def build_parser():
 
     s = sub.add_parser("pending")
     s.add_argument("--agent", required=True)
+    s.add_argument("--include-processing", action="store_true")
     s.set_defaults(func=cmd_pending)
+
+    s = sub.add_parser("queued")
+    s.add_argument("--agent", required=True)
+    s.set_defaults(func=cmd_queued)
 
     s = sub.add_parser("threads")
     s.add_argument("--days", type=int, default=7)

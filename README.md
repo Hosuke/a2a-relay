@@ -63,6 +63,28 @@ python -m a2a_relay --base /root/agent-mailbox pending \
   --agent zhiwei@known-blocks1
 ```
 
+Show pending inbox messages plus messages already claimed for human/operator
+handling:
+
+```bash
+python -m a2a_relay --base /root/agent-mailbox pending \
+  --agent zhiwei \
+  --include-processing
+```
+
+List only queued/claimed processing messages for an operator:
+
+```bash
+python -m a2a_relay --base /root/agent-mailbox queued \
+  --agent zhiwei
+```
+
+`pending --include-processing` and `queued` resolve contact aliases for
+`--agent` and print message metadata only: path, id, from, to, type, subject,
+thread_id, needs_reply, and human_approval_required. They do not print message
+bodies. Malformed JSON in `processing/` is reported with `ok:false`, `error`,
+and `path` instead of crashing.
+
 Poll an inbox and ACK messages:
 
 ```bash
