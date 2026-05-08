@@ -27,6 +27,7 @@ from .core import (
     send_message,
     validate_message,
 )
+from .dispatcher import dispatch_message
 
 
 def cmd_init(args):
@@ -86,47 +87,59 @@ def _config_from_args(args) -> RelayConfig:
     )
 
 
+def _handle_claimed_message(args, base: Path, agent: str, path: Path, *, dispatch_action: str | None = None) -> dict:
+    config = _config_from_args(args)
+    msg = None
+    try:
+        msg = read_message(path)
+        validate_message(msg, config=config)
+        if msg.get("to") != agent:
+            raise ValidationError(f"target mismatch: {msg.get('to')} != {agent}")
+        if has_seen(base, msg):
+            archive = archive_message(base, path, ok=True, message_id=msg.get("id"))
+            log_event(base, "duplicate", message=msg, actor=agent, path=str(archive))
+            return {"path": str(path), "ok": True, "duplicate": True, "archive": str(archive), "message_id": msg.get("id"), "from": msg.get("from"), "to": msg.get("to"), "type": msg.get("type"), "subject": msg.get("subject"), "thread_id": msg.get("thread_id")}
+        log_event(base, "received", message=msg, actor=agent, path=str(path))
+        ack_path = None
+        if args.ack:
+            ack = make_message(
+                agent, msg["from"], "status", f"ACK: {msg.get('subject','')}",
+                f"{agent} received: {msg.get('subject','')}",
+                reply_to=msg.get("id"), thread_id=msg.get("thread_id"),
+            )
+            ack_path = send_message(base, ack)
+            log_event(base, "acked", message=msg, actor=agent, extra={"ack_path": str(ack_path)})
+        result = {"path": str(path), "ok": True, "ack": str(ack_path) if ack_path else None, "message_id": msg.get("id"), "from": msg.get("from"), "to": msg.get("to"), "type": msg.get("type"), "subject": msg.get("subject"), "thread_id": msg.get("thread_id")}
+        if dispatch_action:
+            dispatch = dispatch_message(base, msg, agent, None if dispatch_action == "__default__" else dispatch_action, ack=args.ack)
+            result["dispatch"] = dispatch
+            if dispatch.get("queued_for_human"):
+                result["queued_for_human"] = True
+                return result
+        else:
+            mark_seen(base, msg, actor=agent)
+        archive = archive_message(base, path, ok=True, message_id=msg.get("id"))
+        log_event(base, "archived", message=msg, actor=agent, path=str(archive))
+        result["archive"] = str(archive)
+        return result
+    except Exception as exc:
+        try:
+            archive = archive_message(base, path, ok=False, message_id=(msg or {}).get("id") if isinstance(msg, dict) else None)
+        except Exception:
+            archive = path
+        log_event(base, "failed", message=msg if isinstance(msg, dict) else None, actor=agent, reason=repr(exc), path=str(archive))
+        return {"path": str(path), "ok": False, "error": repr(exc), "archive": str(archive)}
+
+
 def poll_once(args):
     base = Path(args.base)
     agent = resolve_agent(base, args.agent)
-    config = _config_from_args(args)
     results = []
     for inbox_path in list_messages(base, agent):
         path = claim_message(base, agent, inbox_path)
         if path is None:
             continue
-        msg = None
-        try:
-            msg = read_message(path)
-            validate_message(msg, config=config)
-            if msg.get("to") != agent:
-                raise ValidationError(f"target mismatch: {msg.get('to')} != {agent}")
-            if has_seen(base, msg):
-                archive = archive_message(base, path, ok=True, message_id=msg.get("id"))
-                log_event(base, "duplicate", message=msg, actor=agent, path=str(archive))
-                results.append({"path": str(path), "ok": True, "duplicate": True, "archive": str(archive), "message": msg})
-                continue
-            log_event(base, "received", message=msg, actor=agent, path=str(path))
-            ack_path = None
-            if args.ack:
-                ack = make_message(
-                    agent, msg["from"], "status", f"ACK: {msg.get('subject','')}",
-                    f"{agent} received: {msg.get('subject','')}",
-                    reply_to=msg.get("id"), thread_id=msg.get("thread_id"),
-                )
-                ack_path = send_message(base, ack)
-                log_event(base, "acked", message=msg, actor=agent, extra={"ack_path": str(ack_path)})
-            mark_seen(base, msg, actor=agent)
-            archive = archive_message(base, path, ok=True, message_id=msg.get("id"))
-            log_event(base, "archived", message=msg, actor=agent, path=str(archive))
-            results.append({"path": str(path), "ok": True, "ack": str(ack_path) if ack_path else None, "archive": str(archive), "message": msg})
-        except Exception as exc:
-            try:
-                archive = archive_message(base, path, ok=False, message_id=(msg or {}).get("id") if isinstance(msg, dict) else None)
-            except Exception:
-                archive = path
-            log_event(base, "failed", message=msg if isinstance(msg, dict) else None, actor=agent, reason=repr(exc), path=str(archive))
-            results.append({"path": str(path), "ok": False, "error": repr(exc), "archive": str(archive)})
+        results.append(_handle_claimed_message(args, base, agent, path))
     return results
 
 
@@ -135,11 +148,34 @@ def cmd_poll(args):
 
 
 def cmd_watch(args):
+    dispatch_action = getattr(args, "dispatch_action", None)
     while True:
-        results = poll_once(args)
+        if dispatch_action:
+            base = Path(args.base)
+            agent = resolve_agent(base, args.agent)
+            results = []
+            for inbox_path in list_messages(base, agent):
+                path = claim_message(base, agent, inbox_path)
+                if path is None:
+                    continue
+                results.append(_handle_claimed_message(args, base, agent, path, dispatch_action=dispatch_action))
+        else:
+            results = poll_once(args)
         if results:
             print(json.dumps({"count": len(results), "results": results}, ensure_ascii=False), flush=True)
         time.sleep(args.interval)
+
+
+def cmd_dispatch(args):
+    base = Path(args.base)
+    agent = resolve_agent(base, args.agent)
+    results = []
+    for inbox_path in list_messages(base, agent):
+        path = claim_message(base, agent, inbox_path)
+        if path is None:
+            continue
+        results.append(_handle_claimed_message(args, base, agent, path, dispatch_action=args.action or "__default__"))
+    print(json.dumps({"count": len(results), "results": results}, ensure_ascii=False, indent=2))
 
 
 def cmd_pending(args):
@@ -281,7 +317,17 @@ def build_parser():
         s.add_argument("--ack", action="store_true")
         if name == "watch":
             s.add_argument("--interval", type=float, default=10.0)
+            s.add_argument("--dispatch-action", dest="dispatch_action")
         s.set_defaults(func=func)
+
+    s = sub.add_parser("dispatch")
+    s.add_argument("--agent", required=True)
+    s.add_argument("--action")
+    s.add_argument("--allow-from", action="append")
+    s.add_argument("--allowed-type", action="append", default=sorted(["note", "request", "reply", "status", "alert", "handoff", "memory", "heartbeat"]))
+    s.add_argument("--max-body-chars", type=int, default=20000)
+    s.add_argument("--ack", action="store_true")
+    s.set_defaults(func=cmd_dispatch)
 
     s = sub.add_parser("pending")
     s.add_argument("--agent", required=True)

@@ -226,6 +226,86 @@ Message types:
 - Signing fields are reserved and preserved, but not enforced in trusted
   filesystem mode yet.
 
+## v0.3 Dispatcher (auto-reply)
+
+The dispatcher runs a pre-registered local command when an incoming request
+passes the policy gate. Message body enters via stdin only and never selects the
+command to run.
+
+### Quick start
+
+1. Create `dispatcher.json` in the mailbox base:
+
+```json
+{
+  "agents": {
+    "zhiwei@known-blocks1": {
+      "enabled": true,
+      "allowed_from": ["lulu@kamac"],
+      "allowed_types": ["request"],
+      "require_needs_reply": true,
+      "default_action": "auto-reply",
+      "max_body_chars": 20000,
+      "stdout_max_chars": 12000
+    }
+  },
+  "actions": {
+    "auto-reply": {
+      "argv": ["python", "-m", "local_agent_reply"],
+      "cwd": "/srv/zhiwei-agent",
+      "timeout_seconds": 120
+    }
+  }
+}
+```
+
+2. One-shot dispatch:
+
+```bash
+python -m a2a_relay --base /root/agent-mailbox dispatch \
+  --agent zhiwei@known-blocks1 \
+  --action auto-reply \
+  --ack
+```
+
+3. Continuous watch with dispatch:
+
+```bash
+python -m a2a_relay --base /root/agent-mailbox watch \
+  --agent zhiwei@known-blocks1 \
+  --allow-from lulu@kamac \
+  --ack \
+  --dispatch-action auto-reply
+```
+
+### Policy gate
+
+A message is dispatched only when ALL of these conditions hold:
+
+- Sender is a known contact
+- Sender is in the agent's `allowed_from` list
+- `type == "request"`
+- `needs_reply` is true
+- `human_approval_required` is false
+- Message has not already been dispatched (dedupe by id/idempotency_key)
+
+Messages of type `reply`, `status`, or `heartbeat` are never dispatched.
+
+### Safety notes
+
+- `dispatcher.json` is local-only; A2A messages cannot modify it.
+- Message body never chooses which command to run; only `argv` from config is
+  executed.
+- Commands run with `shell=False`; no shell injection is possible.
+- stderr is never included in the reply.
+- stdout is bounded by `stdout_max_chars` before becoming the reply body.
+- Nonzero exit or timeout logs `dispatch_failed` and sends no reply.
+- `human_approval_required` messages are queued only, not dispatched; the
+  claimed message remains in `processing/` for human handling instead of being
+  archived.
+- CLI dispatch/watch output summarizes message metadata only; it does not echo
+  the incoming message body.
+
 ## Safety
 
 A2A Relay does not execute message bodies. A receiving agent should treat
