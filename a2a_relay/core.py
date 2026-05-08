@@ -140,6 +140,8 @@ def validate_message(msg: dict, *, config: RelayConfig | None = None) -> None:
             raise ValidationError(f"field {key!r} must be a non-empty string")
     if msg["type"] not in MESSAGE_TYPES:
         raise ValidationError(f"unknown message type: {msg['type']}")
+    if msg["from"] == msg["to"]:
+        raise ValidationError("self messages are not allowed")
     if msg["type"] not in config.allowed_types:
         raise ValidationError(f"message type not allowed: {msg['type']}")
     urgency = msg.get("urgency", "normal")

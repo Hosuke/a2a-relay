@@ -97,6 +97,31 @@ class A2ARelayV02CLITest(unittest.TestCase):
             inbox = base / "inbox" / "zhiwei_known-blocks1"
             self.assertEqual(list(inbox.glob("*.json")), [])
 
+    def test_inbound_self_message_is_rejected_by_poll(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "mailbox"
+            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
+            payload = {
+                "version": "a2a.v1",
+                "id": "msg_self_inbound",
+                "from": "zhiwei@known-blocks1",
+                "to": "zhiwei@known-blocks1",
+                "type": "status",
+                "subject": "loop",
+                "body": "do not process",
+                "created_at": "2026-05-08T00:00:00Z",
+            }
+            inbox = base / "inbox" / "zhiwei_known-blocks1"
+            (inbox / "self.json").write_text(json.dumps(payload), encoding="utf-8")
+
+            result = load_json(run_cli(base, "poll", "--agent", "zhiwei@known-blocks1", "--allow-from", "zhiwei@known-blocks1").stdout)
+
+            self.assertEqual(result["count"], 1)
+            self.assertFalse(result["results"][0]["ok"])
+            self.assertIn("self messages are not allowed", result["results"][0]["error"])
+            self.assertTrue(list((base / "archive" / "failed").glob("*.json")))
+            self.assertEqual(list(inbox.glob("*.json")), [])
+
     def test_duplicate_id_is_archived_without_second_ack(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
