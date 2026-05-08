@@ -111,6 +111,37 @@ class A2ARelayV02CLITest(unittest.TestCase):
             self.assertIn("Do not expose secrets in the reply.", msg["body"])
             self.assertIn("If write/restart/delete/migration is needed", msg["body"])
 
+    def test_task_send_then_receipt_queues_lancha_request_without_body_echo(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "mailbox"
+            secret = "SECRET_LANCHA_TASK_BODY"
+            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lancha@macmini")
+            sent = run_cli(
+                base,
+                "task",
+                "send",
+                "--from", "zhiwei@known-blocks1",
+                "--to", "lancha@macmini",
+                "--title", "Lancha smoke",
+                "--context", secret,
+                "--capability", "terminal",
+            )
+            msg = json.loads(Path(sent.stdout.strip()).read_text(encoding="utf-8"))
+
+            receipt = load_json(run_cli(base, "receipt", "--agent", "lancha@macmini", "--allow-from", "zhiwei@known-blocks1", "--once", "--json").stdout)
+            queued = load_json(run_cli(base, "queued", "--agent", "lancha@macmini").stdout)
+            timeline = load_json(run_cli(base, "timeline", msg["thread_id"]).stdout)
+
+            self.assertEqual(receipt["count"], 1)
+            self.assertTrue(receipt["results"][0]["queued_for_human"])
+            self.assertEqual(receipt["results"][0]["reason"], "request_requires_human")
+            self.assertNotIn(secret, json.dumps(receipt))
+            self.assertEqual(queued["count"], 1)
+            self.assertEqual(queued["messages"][0]["thread_id"], msg["thread_id"])
+            self.assertNotIn(secret, json.dumps(queued))
+            self.assertTrue(any(event["event_type"] == "receipt_queued_for_human" for event in timeline["events"]))
+            self.assertNotIn(secret, json.dumps(timeline))
+
     def test_send_poll_ack_reply_threads(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"

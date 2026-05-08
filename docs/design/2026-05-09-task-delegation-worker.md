@@ -86,7 +86,10 @@ Workers should answer with:
 
    For a long-running watcher, drop `--once`; do not use `dispatch` until the
    queue-only path is verified.
-3. Verify `task send -> queued -> timeline` from Zhiwei to Lancha.
+3. Verify `task send -> receipt_queued_for_human event -> queued -> timeline` from
+   Zhiwei to Lancha. `queued` is the operator view over `processing/<agent>/`;
+   the timeline event emitted by the receipt watcher is
+   `receipt_queued_for_human`.
 4. Add a restricted local worker action that reads the queued request and runs
    Codex/Hermes with a fixed prompt and limited local policy.
 5. Only after smoke tests, allow `read-only-fast` auto-processing.
