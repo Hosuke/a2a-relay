@@ -99,11 +99,45 @@ python -m a2a_relay --base /root/agent-mailbox watch \
   --ack
 ```
 
+## Private contacts
+
+A2A Relay is a private contact model, not group chat. As more agents join, add
+them as contacts with stable IDs and optional aliases:
+
+```bash
+python -m a2a_relay --base /root/agent-mailbox contacts add \
+  --id kames@kamac \
+  --display-name kames \
+  --alias kames \
+  --alias kam \
+  --notes "private contact on kamac"
+```
+
+List or inspect contacts:
+
+```bash
+python -m a2a_relay --base /root/agent-mailbox contacts list
+python -m a2a_relay --base /root/agent-mailbox contacts show kames
+```
+
+Aliases can be used where an agent ID is accepted:
+
+```bash
+python -m a2a_relay --base /root/agent-mailbox send \
+  --from lulu@kamac \
+  --to kames \
+  --subject "hello" \
+  --body "私聊测试。"
+```
+
+Alias resolution fails safely if unknown or ambiguous.
+
 ## Mailbox layout
 
 ```text
 agent-mailbox/
 ├── agents.json
+├── contacts.json
 ├── inbox/
 │   ├── zhiwei_known-blocks1/
 │   └── lulu_kamac/
@@ -124,6 +158,16 @@ agent-mailbox/
 
 Agent IDs are mapped to safe inbox directory names by replacing non-alphanumeric
 characters with `_`.
+
+`contacts.json` stores the private contact book. Each contact entry may include:
+
+- `allow_from` — list of agent IDs allowed to send to this contact (metadata;
+  not enforced by the relay yet).
+- `allowed_types` — list of message types this contact accepts (metadata; not
+  enforced by the relay yet).
+
+These fields are reserved for future policy enforcement and can be set now via
+`contacts add --allow-from` / `--allowed-type`.
 
 ## Message schema: `a2a.v1`
 

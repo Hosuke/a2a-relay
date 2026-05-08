@@ -6,17 +6,24 @@ import time
 from pathlib import Path
 
 from .core import (
+    Contact,
+    ContactError,
     RelayConfig,
     ValidationError,
+    add_contact,
     archive_message,
     claim_message,
     has_seen,
     init_mailbox,
     list_messages,
+    load_contacts,
     log_event,
     make_message,
     mark_seen,
     read_message,
+    remove_contact,
+    resolve_agent,
+    resolve_contact,
     send_message,
     validate_message,
 )
@@ -28,18 +35,22 @@ def cmd_init(args):
 
 
 def cmd_send(args):
+    base = Path(args.base)
+    recipient = resolve_agent(base, args.to)
+    sender = resolve_agent(base, args.from_)
     msg = make_message(
-        args.from_, args.to, args.type, args.subject, args.body,
+        sender, recipient, args.type, args.subject, args.body,
         reply_to=args.reply_to, thread_id=args.thread_id,
         urgency=args.urgency, needs_reply=args.needs_reply,
         idempotency_key=args.idempotency_key,
     )
-    path = send_message(Path(args.base), msg)
+    path = send_message(base, msg)
     print(path)
 
 
 def cmd_reply(args):
-    original = None
+    base = Path(args.base)
+    sender = resolve_agent(base, args.from_)
     if args.message_file:
         original = read_message(Path(args.message_file))
         to = args.to or original.get("from")
@@ -53,19 +64,22 @@ def cmd_reply(args):
         subject = args.subject
     if not to or not reply_to or not thread_id:
         raise SystemExit("reply requires --to, --reply-to and --thread-id, or --message-file")
+    recipient = resolve_agent(base, to)
     msg = make_message(
-        args.from_, to, "reply", subject or "Re", args.body,
+        sender, recipient, "reply", subject or "Re", args.body,
         reply_to=reply_to, thread_id=thread_id,
         urgency=args.urgency,
     )
-    path = send_message(Path(args.base), msg)
-    log_event(Path(args.base), "replied", message=msg.to_json_dict(), actor=args.from_, extra={"reply_to": reply_to})
+    path = send_message(base, msg)
+    log_event(base, "replied", message=msg.to_json_dict(), actor=sender, extra={"reply_to": reply_to})
     print(path)
 
 
 def _config_from_args(args) -> RelayConfig:
+    base = Path(args.base)
+    allow_from = {resolve_agent(base, item) for item in (args.allow_from or [])}
     return RelayConfig(
-        allow_from=set(args.allow_from or []),
+        allow_from=allow_from,
         allowed_types=set(args.allowed_type or []),
         max_body_chars=args.max_body_chars,
         trusted_filesystem_unsigned=True,
@@ -74,43 +88,44 @@ def _config_from_args(args) -> RelayConfig:
 
 def poll_once(args):
     base = Path(args.base)
+    agent = resolve_agent(base, args.agent)
     config = _config_from_args(args)
     results = []
-    for inbox_path in list_messages(base, args.agent):
-        path = claim_message(base, args.agent, inbox_path)
+    for inbox_path in list_messages(base, agent):
+        path = claim_message(base, agent, inbox_path)
         if path is None:
             continue
         msg = None
         try:
             msg = read_message(path)
             validate_message(msg, config=config)
-            if msg.get("to") != args.agent:
-                raise ValidationError(f"target mismatch: {msg.get('to')} != {args.agent}")
+            if msg.get("to") != agent:
+                raise ValidationError(f"target mismatch: {msg.get('to')} != {agent}")
             if has_seen(base, msg):
                 archive = archive_message(base, path, ok=True, message_id=msg.get("id"))
-                log_event(base, "duplicate", message=msg, actor=args.agent, path=str(archive))
+                log_event(base, "duplicate", message=msg, actor=agent, path=str(archive))
                 results.append({"path": str(path), "ok": True, "duplicate": True, "archive": str(archive), "message": msg})
                 continue
-            log_event(base, "received", message=msg, actor=args.agent, path=str(path))
+            log_event(base, "received", message=msg, actor=agent, path=str(path))
             ack_path = None
             if args.ack:
                 ack = make_message(
-                    args.agent, msg["from"], "status", f"ACK: {msg.get('subject','')}",
-                    f"{args.agent} received: {msg.get('subject','')}",
+                    agent, msg["from"], "status", f"ACK: {msg.get('subject','')}",
+                    f"{agent} received: {msg.get('subject','')}",
                     reply_to=msg.get("id"), thread_id=msg.get("thread_id"),
                 )
                 ack_path = send_message(base, ack)
-                log_event(base, "acked", message=msg, actor=args.agent, extra={"ack_path": str(ack_path)})
-            mark_seen(base, msg, actor=args.agent)
+                log_event(base, "acked", message=msg, actor=agent, extra={"ack_path": str(ack_path)})
+            mark_seen(base, msg, actor=agent)
             archive = archive_message(base, path, ok=True, message_id=msg.get("id"))
-            log_event(base, "archived", message=msg, actor=args.agent, path=str(archive))
+            log_event(base, "archived", message=msg, actor=agent, path=str(archive))
             results.append({"path": str(path), "ok": True, "ack": str(ack_path) if ack_path else None, "archive": str(archive), "message": msg})
         except Exception as exc:
             try:
                 archive = archive_message(base, path, ok=False, message_id=(msg or {}).get("id") if isinstance(msg, dict) else None)
             except Exception:
                 archive = path
-            log_event(base, "failed", message=msg if isinstance(msg, dict) else None, actor=args.agent, reason=repr(exc), path=str(archive))
+            log_event(base, "failed", message=msg if isinstance(msg, dict) else None, actor=agent, reason=repr(exc), path=str(archive))
             results.append({"path": str(path), "ok": False, "error": repr(exc), "archive": str(archive)})
     return results
 
@@ -129,8 +144,9 @@ def cmd_watch(args):
 
 def cmd_pending(args):
     base = Path(args.base)
+    agent = resolve_agent(base, args.agent)
     rows = []
-    for path in list_messages(base, args.agent):
+    for path in list_messages(base, agent):
         try:
             msg = read_message(path)
             rows.append({
@@ -150,6 +166,7 @@ def cmd_pending(args):
 
 def cmd_threads(args):
     base = Path(args.base)
+    contact_id = resolve_agent(base, args.contact) if args.contact else None
     events = []
     events_dir = base / "events"
     for path in sorted(events_dir.glob("*.jsonl"))[-args.days:]:
@@ -159,6 +176,8 @@ def cmd_threads(args):
             try:
                 item = json.loads(line)
             except json.JSONDecodeError:
+                continue
+            if contact_id and contact_id not in {item.get("from"), item.get("to"), item.get("actor")}:
                 continue
             if item.get("thread_id"):
                 events.append(item)
@@ -171,6 +190,49 @@ def cmd_threads(args):
         row["last_event"] = event.get("event_type")
     rows = sorted(by_thread.values(), key=lambda x: x.get("last_timestamp") or "", reverse=True)
     print(json.dumps({"count": len(rows), "threads": rows}, ensure_ascii=False, indent=2))
+
+
+def cmd_contacts_list(args):
+    data = load_contacts(Path(args.base))
+    rows = []
+    for cid, contact in sorted(data.get("contacts", {}).items()):
+        rows.append({
+            "id": cid,
+            "display_name": contact.get("display_name"),
+            "aliases": contact.get("aliases") or [],
+            "transport": contact.get("transport"),
+            "trust_level": contact.get("trust_level"),
+        })
+    print(json.dumps({"count": len(rows), "contacts": rows}, ensure_ascii=False, indent=2))
+
+
+def cmd_contacts_show(args):
+    base = Path(args.base)
+    data = load_contacts(base)
+    cid = resolve_contact(data, args.contact)
+    print(json.dumps(data["contacts"][cid], ensure_ascii=False, indent=2))
+
+
+def cmd_contacts_add(args):
+    base = Path(args.base)
+    allowed_types = args.allowed_type or sorted(["note", "request", "reply", "status", "alert", "handoff", "memory", "heartbeat"])
+    contact = Contact(
+        id=args.id,
+        display_name=args.display_name,
+        aliases=args.alias or [],
+        transport=args.transport,
+        allow_from=args.allow_from or [],
+        allowed_types=allowed_types,
+        trust_level=args.trust_level,
+        notes=args.notes or "",
+    )
+    added = add_contact(base, contact)
+    print(json.dumps(added, ensure_ascii=False, indent=2))
+
+
+def cmd_contacts_remove(args):
+    removed = remove_contact(Path(args.base), args.contact)
+    print(json.dumps({"removed": removed}, ensure_ascii=False, indent=2))
 
 
 def add_send_args(s):
@@ -227,14 +289,43 @@ def build_parser():
 
     s = sub.add_parser("threads")
     s.add_argument("--days", type=int, default=7)
+    s.add_argument("--contact")
     s.set_defaults(func=cmd_threads)
+
+    contacts = sub.add_parser("contacts")
+    csub = contacts.add_subparsers(dest="contacts_cmd", required=True)
+
+    s = csub.add_parser("list")
+    s.set_defaults(func=cmd_contacts_list)
+
+    s = csub.add_parser("show")
+    s.add_argument("contact")
+    s.set_defaults(func=cmd_contacts_show)
+
+    s = csub.add_parser("add")
+    s.add_argument("--id", required=True)
+    s.add_argument("--display-name")
+    s.add_argument("--alias", action="append")
+    s.add_argument("--transport", default="filesystem")
+    s.add_argument("--allow-from", action="append")
+    s.add_argument("--allowed-type", action="append")
+    s.add_argument("--trust-level", default="trusted-filesystem")
+    s.add_argument("--notes")
+    s.set_defaults(func=cmd_contacts_add)
+
+    s = csub.add_parser("remove")
+    s.add_argument("contact")
+    s.set_defaults(func=cmd_contacts_remove)
     return p
 
 
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
-    args.func(args)
+    try:
+        args.func(args)
+    except ContactError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 if __name__ == "__main__":

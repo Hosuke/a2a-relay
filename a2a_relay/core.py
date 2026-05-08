@@ -21,12 +21,39 @@ class ValidationError(ValueError):
     """Raised when an A2A message fails schema or policy validation."""
 
 
+class ContactError(ValueError):
+    """Raised when an agent contact cannot be created or resolved safely."""
+
+
 @dataclass
 class RelayConfig:
     allow_from: set[str] = field(default_factory=set)
     allowed_types: set[str] = field(default_factory=lambda: set(MESSAGE_TYPES))
     max_body_chars: int = DEFAULT_MAX_BODY_CHARS
     trusted_filesystem_unsigned: bool = True
+
+
+@dataclass
+class Contact:
+    id: str
+    display_name: str | None = None
+    aliases: list[str] = field(default_factory=list)
+    transport: str = "filesystem"
+    inbox: str | None = None
+    allow_from: list[str] = field(default_factory=list)
+    allowed_types: list[str] = field(default_factory=lambda: sorted(MESSAGE_TYPES))
+    trust_level: str = "trusted-filesystem"
+    notes: str = ""
+
+    def to_json_dict(self, base: Path | None = None) -> dict:
+        inbox = self.inbox
+        if inbox is None and base is not None:
+            inbox = str(inbox_dir(base, self.id))
+        data = asdict(self)
+        data["safe_name"] = safe_name(self.id)
+        data["display_name"] = self.display_name or self.id
+        data["inbox"] = inbox
+        return data
 
 
 def now_iso() -> str:
@@ -151,18 +178,121 @@ def processing_dir(base: Path, agent_id: str) -> Path:
     return base / "processing" / safe_name(agent_id)
 
 
+def contacts_path(base: Path) -> Path:
+    return base / "contacts.json"
+
+
 def init_mailbox(base: Path, agents: Iterable[str]) -> None:
     base.mkdir(parents=True, exist_ok=True)
     for sub in ["archive/processed", "archive/failed", "events", "logs", "tmp", "locks", "state", "processing"]:
         (base / sub).mkdir(parents=True, exist_ok=True)
     agent_map = {}
+    contacts = {}
     for agent in agents:
         inbox = inbox_dir(base, agent)
         inbox.mkdir(parents=True, exist_ok=True)
         processing = processing_dir(base, agent)
         processing.mkdir(parents=True, exist_ok=True)
         agent_map[agent] = {"inbox": str(inbox), "processing": str(processing), "safe_name": safe_name(agent)}
+        contacts[agent] = Contact(id=agent).to_json_dict(base)
     (base / "agents.json").write_text(json.dumps({"agents": agent_map}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path = contacts_path(base)
+    if not path.exists():
+        path.write_text(json.dumps({"contacts": contacts}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def load_contacts(base: Path) -> dict:
+    path = contacts_path(base)
+    if path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
+    agents_file = base / "agents.json"
+    contacts = {}
+    if agents_file.exists():
+        data = json.loads(agents_file.read_text(encoding="utf-8"))
+        for agent_id in data.get("agents", {}):
+            contacts[agent_id] = Contact(id=agent_id).to_json_dict(base)
+    return {"contacts": contacts}
+
+
+def save_contacts(base: Path, data: dict) -> None:
+    contacts_path(base).write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def add_contact(base: Path, contact: Contact) -> dict:
+    if not contact.id or not isinstance(contact.id, str):
+        raise ContactError("contact id is required")
+    data = load_contacts(base)
+    contacts = data.setdefault("contacts", {})
+    id_matches = find_contact_matches(data, contact.id)
+    if id_matches:
+        raise ContactError(f"contact id conflicts with existing contact: {', '.join(id_matches)}")
+    display = contact.display_name or contact.id
+    if display != contact.id:
+        dn_matches = find_contact_matches(data, display)
+        if dn_matches:
+            raise ContactError(f"display_name conflicts with existing contact: {', '.join(dn_matches)}")
+    sn = safe_name(contact.id)
+    if sn != contact.id:
+        sn_matches = find_contact_matches(data, sn)
+        if sn_matches:
+            raise ContactError(f"safe_name conflicts with existing contact: {', '.join(sn_matches)}")
+    aliases = [a for a in contact.aliases if a]
+    if len(set(aliases)) != len(aliases):
+        raise ContactError("duplicate aliases on contact")
+    for alias in aliases:
+        matches = find_contact_matches(data, alias)
+        if matches:
+            raise ContactError(f"alias already used: {alias}")
+    inbox_dir(base, contact.id).mkdir(parents=True, exist_ok=True)
+    processing_dir(base, contact.id).mkdir(parents=True, exist_ok=True)
+    contacts[contact.id] = contact.to_json_dict(base)
+    save_contacts(base, data)
+    return contacts[contact.id]
+
+
+def remove_contact(base: Path, target: str) -> str:
+    data = load_contacts(base)
+    resolved = resolve_contact(data, target)
+    del data.setdefault("contacts", {})[resolved]
+    save_contacts(base, data)
+    return resolved
+
+
+def find_contact_matches(data: dict, target: str) -> list[str]:
+    contacts = data.get("contacts", {})
+    matches = []
+    for cid, contact in contacts.items():
+        names = {cid, contact.get("display_name") or "", contact.get("safe_name") or safe_name(cid)}
+        names.update(contact.get("aliases") or [])
+        if target in names:
+            matches.append(cid)
+    return sorted(set(matches))
+
+
+def resolve_contact(data: dict, target: str) -> str:
+    contacts = data.get("contacts", {})
+    if target in contacts:
+        return target
+    matches = find_contact_matches(data, target)
+    if not matches:
+        raise ContactError(f"unknown contact: {target}")
+    if len(matches) > 1:
+        raise ContactError(f"ambiguous contact alias {target!r}: {', '.join(matches)}")
+    return matches[0]
+
+
+def resolve_agent(base: Path, target: str) -> str:
+    has_contacts_file = contacts_path(base).exists()
+    data = load_contacts(base)
+    try:
+        return resolve_contact(data, target)
+    except ContactError:
+        matches = find_contact_matches(data, target)
+        if len(matches) > 1:
+            raise  # ambiguous — always fatal
+        if not has_contacts_file:
+            return target  # backward compat for old mailboxes
+        raise
 
 
 def atomic_write_json(path: Path, data: dict) -> None:
