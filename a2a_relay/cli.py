@@ -98,7 +98,7 @@ def _handle_claimed_message(args, base: Path, agent: str, path: Path, *, dispatc
         if has_seen(base, msg):
             archive = archive_message(base, path, ok=True, message_id=msg.get("id"))
             log_event(base, "duplicate", message=msg, actor=agent, path=str(archive))
-            return {"path": str(path), "ok": True, "duplicate": True, "archive": str(archive), "message": msg}
+            return {"path": str(path), "ok": True, "duplicate": True, "archive": str(archive), "message_id": msg.get("id"), "from": msg.get("from"), "to": msg.get("to"), "type": msg.get("type"), "subject": msg.get("subject"), "thread_id": msg.get("thread_id")}
         log_event(base, "received", message=msg, actor=agent, path=str(path))
         ack_path = None
         if args.ack:
@@ -109,7 +109,7 @@ def _handle_claimed_message(args, base: Path, agent: str, path: Path, *, dispatc
             )
             ack_path = send_message(base, ack)
             log_event(base, "acked", message=msg, actor=agent, extra={"ack_path": str(ack_path)})
-        result = {"path": str(path), "ok": True, "ack": str(ack_path) if ack_path else None, "message": msg}
+        result = {"path": str(path), "ok": True, "ack": str(ack_path) if ack_path else None, "message_id": msg.get("id"), "from": msg.get("from"), "to": msg.get("to"), "type": msg.get("type"), "subject": msg.get("subject"), "thread_id": msg.get("thread_id")}
         if dispatch_action:
             dispatch = dispatch_message(base, msg, agent, None if dispatch_action == "__default__" else dispatch_action, ack=args.ack)
             result["dispatch"] = dispatch

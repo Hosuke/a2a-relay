@@ -300,7 +300,11 @@ Messages of type `reply`, `status`, or `heartbeat` are never dispatched.
 - stderr is never included in the reply.
 - stdout is bounded by `stdout_max_chars` before becoming the reply body.
 - Nonzero exit or timeout logs `dispatch_failed` and sends no reply.
-- `human_approval_required` messages are queued only, not dispatched.
+- `human_approval_required` messages are queued only, not dispatched; the
+  claimed message remains in `processing/` for human handling instead of being
+  archived.
+- CLI dispatch/watch output summarizes message metadata only; it does not echo
+  the incoming message body.
 
 ## Safety
 

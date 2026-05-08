@@ -353,7 +353,7 @@ class TestDispatchCLI(unittest.TestCase):
                                    [sys.executable, "-c", ECHO_SCRIPT],
                                    allowed_from=["lulu@kamac"])
             msg = make_message("lulu@kamac", "zhiwei@known-blocks1", "request",
-                               "dispatch test", "hi", needs_reply=True)
+                               "dispatch test", "SECRET_BODY_MARKER", needs_reply=True)
             send_message(base, msg)
 
             result = sp.run(
@@ -366,6 +366,8 @@ class TestDispatchCLI(unittest.TestCase):
             self.assertEqual(output["count"], 1)
             self.assertTrue(output["results"][0]["ok"])
             self.assertTrue(output["results"][0]["dispatch"]["dispatched"])
+            self.assertNotIn("message", output["results"][0])
+            self.assertNotIn("SECRET_BODY_MARKER", result.stdout)
 
     def test_dispatch_cli_human_approval_stays_in_processing(self):
         import subprocess as sp
