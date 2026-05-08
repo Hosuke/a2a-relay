@@ -114,7 +114,7 @@ class A2ARelayV02CLITest(unittest.TestCase):
     def test_task_send_then_receipt_queues_worker_request_without_body_echo(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
-            secret = "SECRET_LANCHA_TASK_BODY"
+            secret = "SECRET_WORKER_TASK_BODY"
             run_cli(base, "init", "--agent", "operator@example", "--agent", "worker@example")
             sent = run_cli(
                 base,

@@ -142,7 +142,7 @@ Tasks:
 
 Acceptance:
 
-- worker can ask “IMA 旧条目怎么删?” and operator can auto-generate a bounded reply.
+- worker can ask an allowed operational question and operator can auto-generate a bounded reply.
 - If dispatcher fails, worker receives a failure status with a short reason.
 - No message can force arbitrary shell execution outside configured command.
 
@@ -159,7 +159,7 @@ Tasks:
   "id": "worker@example",
   "display_name": "worker",
   "public_key": null,
-  "hmac_key_ref": "env:A2A_LULU_HMAC_KEY",
+  "hmac_key_ref": "env:A2A_WORKER_HMAC_KEY",
   "allowed_types": ["note", "request", "reply", "status"],
   "max_urgency": "high"
 }

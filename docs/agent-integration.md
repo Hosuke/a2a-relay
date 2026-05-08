@@ -214,7 +214,7 @@ unit instance name, create a wrapper unit or a drop-in with an explicit
 
 1. Operator initializes a mailbox with `worker@example` and `operator@example`.
 2. Operator adds any extra private contacts and aliases.
-3. Lulu sends a `request` with `needs_reply=true`.
+3. The worker sends a `request` with `needs_reply=true`.
 4. Operator's watcher validates sender policy with `--allow-from worker@example`.
 5. If dispatch is configured and the request passes policy, a local action runs
    with the message as stdin and sends stdout as a `reply`.
