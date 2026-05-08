@@ -13,7 +13,10 @@ jobs:
       - run: python -m py_compile a2a_relay/*.py tests/*.py
       - run: python -m unittest discover -s tests -q
       - run: python -m a2a_relay --base /tmp/a2a init --agent lulu@kamac --agent zhiwei@known-blocks1
+      - run: python -m a2a_relay --base /tmp/a2a contacts add --id kames@kamac --alias kames
+      - run: python -m a2a_relay --base /tmp/a2a contacts list
       - run: python -m a2a_relay --base /tmp/a2a send --from lulu@kamac --to zhiwei@known-blocks1 --type request --subject hi --body hello --needs-reply
+      - run: python -m a2a_relay --base /tmp/a2a send --from zhiwei@known-blocks1 --to kames --type note --subject hi --body hello
       - run: python -m a2a_relay --base /tmp/a2a pending --agent zhiwei@known-blocks1
       - run: python -m a2a_relay --base /tmp/a2a poll --agent zhiwei@known-blocks1 --allow-from lulu@kamac --ack
-      - run: python -m a2a_relay --base /tmp/a2a threads
+      - run: python -m a2a_relay --base /tmp/a2a threads --contact lulu@kamac
