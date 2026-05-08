@@ -1,6 +1,6 @@
 [project]
 name = "a2a-relay"
-version = "0.1.0"
+version = "0.3.0"
 description = "Small, boring, auditable agent-to-agent relay protocol and filesystem mailbox transport."
 readme = "README.md"
 requires-python = ">=3.9"
