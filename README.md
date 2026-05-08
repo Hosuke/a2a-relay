@@ -22,6 +22,25 @@ A2A Relay starts with the most reliable primitive:
 > write a structured message into the other agent's inbox, get an ACK,
 > archive the original, and preserve an event log.
 
+## Start here
+
+For new users, start with the focused docs:
+
+- [Getting started](docs/getting-started.md) — init, send, pending, poll, reply,
+  and mailbox layout.
+- [Configuration](docs/configuration.md) — `contacts.json` and `dispatcher.json`
+  schemas, examples, and policy notes.
+- [Message schema](docs/message-schema.md) — message types, fields, validation,
+  body limits, attachments, and reserved signing fields.
+- [Agent integration](docs/agent-integration.md) — Python API, CLI-compatible
+  flows, dispatcher integration, systemd, and an end-to-end scenario.
+- [Adding an agent](docs/adding-an-agent.md) — self-service checklist for adding
+  a private agent safely.
+
+These pages address onboarding issues #11-#15. See also
+`examples/python_agent.py`, `examples/config/minimal-contacts.json`, and
+`examples/config/minimal-dispatcher.json`.
+
 ## Design principles
 
 - **Messages, not remote control** — agents exchange requests and replies, not

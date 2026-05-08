@@ -1,0 +1,20 @@
+{
+  "agents": {
+    "zhiwei@known-blocks1": {
+      "enabled": true,
+      "allowed_from": ["lulu@kamac"],
+      "allowed_types": ["request"],
+      "require_needs_reply": true,
+      "default_action": "auto-reply",
+      "max_body_chars": 20000,
+      "stdout_max_chars": 12000
+    }
+  },
+  "actions": {
+    "auto-reply": {
+      "argv": ["python", "-m", "local_agent_reply"],
+      "cwd": "/srv/zhiwei-agent",
+      "timeout_seconds": 120
+    }
+  }
+}

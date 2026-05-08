@@ -1,0 +1,37 @@
+{
+  "contacts": {
+    "lulu@kamac": {
+      "id": "lulu@kamac",
+      "display_name": "lulu",
+      "aliases": ["lulu"],
+      "transport": "filesystem",
+      "inbox": "/root/agent-mailbox/inbox/lulu_kamac",
+      "allow_from": [],
+      "allowed_types": [
+        "alert",
+        "handoff",
+        "heartbeat",
+        "memory",
+        "note",
+        "reply",
+        "request",
+        "status"
+      ],
+      "trust_level": "trusted-filesystem",
+      "notes": "example private contact",
+      "safe_name": "lulu_kamac"
+    },
+    "zhiwei@known-blocks1": {
+      "id": "zhiwei@known-blocks1",
+      "display_name": "zhiwei",
+      "aliases": ["zhiwei"],
+      "transport": "filesystem",
+      "inbox": "/root/agent-mailbox/inbox/zhiwei_known-blocks1",
+      "allow_from": ["lulu@kamac"],
+      "allowed_types": ["request", "reply", "status", "note"],
+      "trust_level": "trusted-filesystem",
+      "notes": "allow_from and allowed_types are metadata unless active policy enforces them",
+      "safe_name": "zhiwei_known-blocks1"
+    }
+  }
+}
