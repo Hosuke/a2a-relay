@@ -49,6 +49,8 @@ def check_policy_gate(base: Path, msg: dict, agent_id: str, config: dict) -> tup
         validate_message(msg, config=RelayConfig())
     except ValidationError as exc:
         return False, str(exc)
+    if msg.get("to") != agent_id:
+        return False, f"target mismatch: {msg.get('to')} != {agent_id}"
 
     policy = get_agent_policy(config, agent_id)
     if policy is None:

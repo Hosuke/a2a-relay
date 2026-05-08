@@ -167,6 +167,19 @@ class TestDispatcherPolicyGate(unittest.TestCase):
         self.assertEqual(result["reason"], "self messages are not allowed")
         self.assertEqual(list(inbox_dir(base, "zhiwei@known-blocks1").glob("*.json")), [])
 
+    def test_target_mismatch_skipped_before_subprocess(self):
+        base = self._setup_mailbox()
+        make_dispatcher_config(base, "zhiwei@known-blocks1", "echo",
+                               [sys.executable, "-c", ECHO_SCRIPT],
+                               allowed_from=["lulu@kamac"])
+        msg = make_request_msg(recipient="someone_else")
+
+        result = dispatch_message(base, msg, "zhiwei@known-blocks1")
+
+        self.assertFalse(result["dispatched"])
+        self.assertEqual(result["reason"], "target mismatch: someone_else != zhiwei@known-blocks1")
+        self.assertEqual(list(inbox_dir(base, "lulu@kamac").glob("*.json")), [])
+
     def test_reply_type_skipped(self):
         base = self._setup_mailbox()
         make_dispatcher_config(base, "zhiwei@known-blocks1", "echo",
