@@ -74,7 +74,18 @@ Workers should answer with:
 ## Lancha Mac mini rollout sketch
 
 1. Add `lancha@macmini` as a contact in the shared mailbox.
-2. Start with Level 1 receipt watcher: requests queue, no Hermes execution.
+2. Start with Level 1 receipt watcher: requests queue, no Hermes execution:
+
+   ```bash
+   python -m a2a_relay --base /root/agent-mailbox receipt \
+     --agent lancha@macmini \
+     --allow-from zhiwei@known-blocks1 \
+     --once \
+     --json
+   ```
+
+   For a long-running watcher, drop `--once`; do not use `dispatch` until the
+   queue-only path is verified.
 3. Verify `task send -> queued -> timeline` from Zhiwei to Lancha.
 4. Add a restricted local worker action that reads the queued request and runs
    Codex/Hermes with a fixed prompt and limited local policy.

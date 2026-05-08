@@ -89,6 +89,28 @@ class A2ARelayV02CLITest(unittest.TestCase):
             self.assertIn("If write/restart/delete/migration is needed", msg["body"])
             self.assertIn("whether human approval is needed", msg["body"])
 
+    def test_task_send_custom_constraints_append_to_safety_baseline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "mailbox"
+            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lancha@macmini")
+
+            sent = run_cli(
+                base,
+                "task",
+                "send",
+                "--from", "zhiwei@known-blocks1",
+                "--to", "lancha@macmini",
+                "--title", "Inspect database",
+                "--constraint", "Read-only checks only.",
+            )
+            msg = json.loads(Path(sent.stdout.strip()).read_text(encoding="utf-8"))
+
+            self.assertIn("Read-only checks only.", msg["body"])
+            self.assertIn("Do not make destructive changes.", msg["body"])
+            self.assertIn("Do not restart services or modify configuration", msg["body"])
+            self.assertIn("Do not expose secrets in the reply.", msg["body"])
+            self.assertIn("If write/restart/delete/migration is needed", msg["body"])
+
     def test_send_poll_ack_reply_threads(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"

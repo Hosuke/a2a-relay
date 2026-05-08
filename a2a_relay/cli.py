@@ -84,13 +84,16 @@ def cmd_reply(args):
     print(path)
 
 
+TASK_SAFETY_CONSTRAINTS = [
+    "Do not make destructive changes.",
+    "Do not restart services or modify configuration unless explicitly approved.",
+    "Do not expose secrets in the reply.",
+    "If write/restart/delete/migration is needed, reply with human_approval_required.",
+]
+
+
 def _build_task_body(args) -> str:
-    constraints = args.constraint or [
-        "Do not make destructive changes.",
-        "Do not restart services or modify configuration unless explicitly approved.",
-        "Do not expose secrets in the reply.",
-        "If write/restart/delete/migration is needed, reply with human_approval_required.",
-    ]
+    constraints = [*TASK_SAFETY_CONSTRAINTS, *(args.constraint or [])]
     outputs = args.require_output or [
         "summary",
         "commands run",
