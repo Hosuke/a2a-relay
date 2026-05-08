@@ -1,6 +1,6 @@
 # A2A Relay Upgrade Plan
 
-> **For Hermes:** Use cursor-agent-workflow for design review first, then implement in small PR-sized increments.
+> **For maintainers:** Use external design-review workflow for design review first, then implement in small PR-sized increments.
 
 **Goal:** Evolve A2A Relay from a working filesystem mailbox into a durable, auditable, multi-agent coordination layer that supports near-realtime replies, safe automation, and future webhook/WebSocket transports.
 
@@ -297,7 +297,7 @@ Recommended deployment:
 ## Cursor-Agent Review Prompt
 
 ```text
-You are reviewing Hosuke/a2a-relay. Read README.md, docs/protocol.md, a2a_relay/core.py, a2a_relay/cli.py, and docs/design/2026-05-08-a2a-relay-upgrade-plan.md.
+You are reviewing this repository. Read README.md, docs/protocol.md, a2a_relay/core.py, a2a_relay/cli.py, and docs/design/2026-05-08-a2a-relay-upgrade-plan.md.
 
 Goal: critique and improve the upgrade plan for an agent-to-agent relay used by operator@example and worker@example. Requirements: least privilege, auditable messages, near-realtime replies, no arbitrary remote execution, future webhook/WebSocket path.
 

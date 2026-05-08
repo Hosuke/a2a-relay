@@ -74,7 +74,7 @@ Workers should answer with:
 ## Private worker rollout sketch
 
 1. Add the worker agent as a contact in the shared mailbox.
-2. Start with Level 1 receipt watcher: requests queue, no Hermes execution:
+2. Start with Level 1 receipt watcher: requests queue, no local agent runner execution:
 
    ```bash
    python -m a2a_relay --base /root/agent-mailbox receipt \
@@ -91,7 +91,7 @@ Workers should answer with:
    the timeline event emitted by the receipt watcher is
    `receipt_queued_for_human`.
 4. Add a restricted local worker action that reads the queued request and runs
-   Codex/Hermes with a fixed prompt and limited local policy.
+   a local agent runner with a fixed prompt and limited local policy.
 5. Only after smoke tests, allow `read-only-fast` auto-processing.
 
 ## Safety reminders

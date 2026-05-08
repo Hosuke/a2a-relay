@@ -192,8 +192,8 @@ human handling by default; use `--archive-requests-too` only for smoke tests.
 Messages with `human_approval_required=true` are always queued in `processing/`.
 Use `--recover-processing` after watcher restarts to re-report or finish
 messages that were already claimed before a crash. The receipt watcher does not
-execute message bodies, run subprocesses, call
-Hermes, or send recursive ACK/status messages.
+The receipt watcher does not invoke agent runners, subprocesses, shell commands,
+or send recursive ACK/status messages.
 
 ## Private contacts
 

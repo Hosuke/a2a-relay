@@ -15,7 +15,7 @@ The current runtime has:
 The next runtime gap is not protocol shape; it is safe consumption:
 
 - worker has pending messages, but no confirmed watcher consumes `inbox/worker_example`.
-- operator can dispatch safe replies, but not yet Hermes one-shot replies.
+- operator can dispatch safe replies, but not yet local agent one-shot replies.
 - future contacts such as new contact should join without changing the trust model.
 
 ## Design principle
@@ -46,7 +46,7 @@ This is current worker state.
 ### Level 1: receipt watcher
 
 A watcher claims messages, logs them, optionally sends ACK/status, and archives or queues them.
-It does not invoke Hermes.
+It does not invoke local agent runner.
 
 Use for first worker-side deployment.
 
@@ -59,13 +59,13 @@ Safety:
 
 ### Level 2: one-shot summarizer
 
-A watcher invokes Hermes with restricted toolsets and a fixed prompt only to summarize or draft a reply.
+A watcher invokes local agent runner with restricted toolsets and a fixed prompt only to summarize or draft a reply.
 It does not run terminal/file tools unless explicitly allowed by local policy.
 
 Suggested command shape:
 
 ```bash
-hermes --profile worker chat -q '<fixed prompt with <a2a_message>...</a2a_message>>' \
+agent-runner --profile worker chat -q '<fixed prompt with <a2a_message>...</a2a_message>>' \
   --toolsets session_search,skills -Q
 ```
 
@@ -82,7 +82,7 @@ Do not add him as a broadcast participant. Add as a contact:
 
 ```bash
 /root/agent-mailbox/bin/a2a contacts add \
-  --id <jun-agent-id> \
+  --id <new-agent-id> \
   --display-name 'new contact' \
   --alias new-contact \
   --trust-level trusted-filesystem-or-external \
@@ -106,11 +106,11 @@ External public channels should wait for v0.4 signing or webhook HMAC.
 3. For `note/status/reply` it claims and archives after logging; for `request` it queues unless explicitly configured.
 4. It writes a concise local JSONL receipt log for worker.
 5. Test with the two current pending worker messages.
-6. Only after that, design Level 2 Hermes one-shot with worker profile on worker-host.example.
+6. Only after that, design Level 2 local agent one-shot with worker profile on worker-host.example.
 
 ## Non-goals now
 
 - No group chat.
 - No arbitrary command execution.
 - No public webhook until signatures/replay protection.
-- No full Hermes auto-agent replies until receipt watcher is stable.
+- No full local agent runner auto-agent replies until receipt watcher is stable.
