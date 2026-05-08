@@ -222,7 +222,7 @@ Acceptance:
 
 ## Immediate Next Step
 
-Cursor-agent review is now complete. Implement v0.2 in one small PR, with this scope:
+External design review is now complete. Implement v0.2 in one small PR, with this scope:
 
 - `reply` command
 - validator and body size limit
@@ -294,7 +294,7 @@ Recommended deployment:
 
 ---
 
-## Cursor-Agent Review Prompt
+## External Review Prompt
 
 ```text
 You are reviewing this repository. Read README.md, docs/protocol.md, a2a_relay/core.py, a2a_relay/cli.py, and docs/design/2026-05-08-a2a-relay-upgrade-plan.md.
