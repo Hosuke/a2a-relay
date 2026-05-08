@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .core import (
@@ -32,6 +33,8 @@ from .dispatcher import dispatch_message
 
 RECEIPT_ARCHIVE_TYPES = {"note", "status", "reply", "heartbeat"}
 RECEIPT_DEFAULT_TYPES = sorted(RECEIPT_ARCHIVE_TYPES | {"request"})
+FAILED_EVENT_TYPES = {"failed", "dispatch_failed"}
+TIMELINE_FIELDS = ("timestamp", "event_type", "actor", "message_id", "from", "to", "reason", "path")
 
 
 def cmd_init(args):
@@ -306,32 +309,248 @@ def cmd_queued(args):
     print(json.dumps({"count": len(rows), "messages": rows}, ensure_ascii=False, indent=2))
 
 
-def cmd_threads(args):
-    base = Path(args.base)
-    contact_id = resolve_agent(base, args.contact) if args.contact else None
-    events = []
+def _parse_event_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except Exception:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _event_cutoff(days: int | None) -> datetime | None:
+    if days is None or days <= 0:
+        return None
+    return datetime.now(timezone.utc) - timedelta(days=days)
+
+
+def _iter_events(base: Path, *, days: int | None = None):
     events_dir = base / "events"
-    for path in sorted(events_dir.glob("*.jsonl"))[-args.days:]:
-        for line in path.read_text(encoding="utf-8").splitlines():
+    cutoff = _event_cutoff(days)
+    for path in sorted(events_dir.glob("*.jsonl")):
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for line in lines:
             if not line.strip():
                 continue
             try:
                 item = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if contact_id and contact_id not in {item.get("from"), item.get("to"), item.get("actor")}:
+            timestamp = _parse_event_timestamp(item.get("timestamp"))
+            if cutoff and timestamp and timestamp < cutoff:
                 continue
-            if item.get("thread_id"):
-                events.append(item)
+            yield item
+
+
+def _thread_contact_match(event: dict, contact_id: str | None) -> bool:
+    if not contact_id:
+        return True
+    return contact_id in {event.get("from"), event.get("to"), event.get("actor")}
+
+
+def _scan_live_threads(base: Path) -> dict[str, dict]:
+    by_thread: dict[str, dict] = {}
+    for dirname, count_key in [
+        ("inbox", "pending_count"),
+        ("processing", "queued_count"),
+    ]:
+        root = base / dirname
+        for path in sorted(root.glob("*/*.json")):
+            try:
+                msg = read_message(path)
+            except Exception:
+                continue
+            tid = msg.get("thread_id")
+            if not tid:
+                continue
+            row = by_thread.setdefault(tid, {
+                "pending_count": 0,
+                "queued_count": 0,
+                "needs_reply": False,
+                "participants": set(),
+                "message_ids": set(),
+            })
+            row[count_key] += 1
+            if msg.get("from"):
+                row["participants"].add(msg.get("from"))
+            if msg.get("to"):
+                row["participants"].add(msg.get("to"))
+            if msg.get("id"):
+                row["message_ids"].add(msg.get("id"))
+            # Conservative live-only inference: archived history is not inspected.
+            if msg.get("needs_reply") is True or msg.get("type") == "request":
+                row["needs_reply"] = True
+    return by_thread
+
+
+def cmd_threads(args):
+    base = Path(args.base)
+    contact_id = resolve_agent(base, args.contact) if args.contact else None
+    event_types = set(args.event_type or [])
+    all_events = [
+        event for event in _iter_events(base, days=args.days)
+        if event.get("thread_id") and _thread_contact_match(event, contact_id)
+    ]
+    events = [
+        event for event in all_events
+        if not event_types or event.get("event_type") in event_types
+    ]
+    failed_threads = {
+        event["thread_id"] for event in all_events
+        if event.get("event_type") in FAILED_EVENT_TYPES
+    }
+    live_threads = _scan_live_threads(base)
     by_thread: dict[str, dict] = {}
     for event in events:
         tid = event["thread_id"]
-        row = by_thread.setdefault(tid, {"thread_id": tid, "events": 0, "last_timestamp": None, "last_event": None})
+        row = by_thread.setdefault(tid, {
+            "thread_id": tid,
+            "events": 0,
+            "first_timestamp": None,
+            "last_timestamp": None,
+            "last_event": None,
+            "participants": set(),
+            "message_ids": set(),
+            "failed": False,
+            "pending_count": 0,
+            "queued_count": 0,
+            "needs_reply": False,
+        })
         row["events"] += 1
-        row["last_timestamp"] = event.get("timestamp")
-        row["last_event"] = event.get("event_type")
-    rows = sorted(by_thread.values(), key=lambda x: x.get("last_timestamp") or "", reverse=True)
+        timestamp = event.get("timestamp")
+        if timestamp and (row["first_timestamp"] is None or timestamp < row["first_timestamp"]):
+            row["first_timestamp"] = timestamp
+        if timestamp and (row["last_timestamp"] is None or timestamp >= row["last_timestamp"]):
+            row["last_timestamp"] = timestamp
+            row["last_event"] = event.get("event_type")
+        for key in ("from", "to", "actor"):
+            if event.get(key):
+                row["participants"].add(event.get(key))
+        if event.get("message_id"):
+            row["message_ids"].add(event.get("message_id"))
+        if event.get("event_type") in FAILED_EVENT_TYPES:
+            row["failed"] = True
+    for tid, live in live_threads.items():
+        if event_types and tid not in by_thread:
+            continue
+        if contact_id and contact_id not in live["participants"]:
+            continue
+        row = by_thread.setdefault(tid, {
+            "thread_id": tid,
+            "events": 0,
+            "first_timestamp": None,
+            "last_timestamp": None,
+            "last_event": None,
+            "participants": set(),
+            "message_ids": set(),
+            "failed": False,
+            "pending_count": 0,
+            "queued_count": 0,
+            "needs_reply": False,
+        })
+        row["pending_count"] += live["pending_count"]
+        row["queued_count"] += live["queued_count"]
+        row["needs_reply"] = row["needs_reply"] or live["needs_reply"]
+        row["participants"].update(live["participants"])
+        row["message_ids"].update(live["message_ids"])
+    for tid, row in by_thread.items():
+        row["failed"] = row["failed"] or tid in failed_threads
+    rows = []
+    for row in by_thread.values():
+        if args.failed and not row["failed"]:
+            continue
+        if args.needs_reply and not row["needs_reply"]:
+            continue
+        row["participants"] = sorted(row["participants"])
+        row["message_ids"] = sorted(row["message_ids"])
+        rows.append(row)
+    rows = sorted(rows, key=lambda x: x.get("last_timestamp") or "", reverse=True)
     print(json.dumps({"count": len(rows), "threads": rows}, ensure_ascii=False, indent=2))
+
+
+def cmd_timeline(args):
+    base = Path(args.base)
+    events = [
+        {key: event.get(key) for key in TIMELINE_FIELDS if event.get(key) is not None}
+        for event in _iter_events(base, days=args.days)
+        if event.get("thread_id") == args.thread_id
+    ]
+    events.sort(key=lambda event: event.get("timestamp") or "")
+    if args.markdown:
+        print(f"# Timeline {args.thread_id}")
+        print()
+        if not events:
+            print("_No events found._")
+            return
+        for event in events:
+            parts = [event.get("event_type") or "event"]
+            if event.get("actor"):
+                parts.append(f"actor={event['actor']}")
+            if event.get("message_id"):
+                parts.append(f"message_id={event['message_id']}")
+            if event.get("from") or event.get("to"):
+                parts.append(f"{event.get('from', '?')} -> {event.get('to', '?')}")
+            if event.get("reason"):
+                parts.append(f"reason={event['reason']}")
+            if event.get("path"):
+                parts.append(f"path={event['path']}")
+            print(f"- {event.get('timestamp', '')}: " + "; ".join(parts))
+        return
+    print(json.dumps({"thread_id": args.thread_id, "count": len(events), "events": events}, ensure_ascii=False, indent=2))
+
+
+def _count_malformed_json(root: Path) -> int:
+    count = 0
+    for path in sorted(root.glob("*/*.json")):
+        try:
+            read_message(path)
+        except Exception:
+            count += 1
+    return count
+
+
+def _count_messages_by_agent(root: Path) -> dict[str, int]:
+    counts = {}
+    if not root.exists():
+        return counts
+    for path in sorted(root.iterdir()):
+        if path.is_dir():
+            counts[path.name] = len(list(path.glob("*.json")))
+    return counts
+
+
+def cmd_doctor(args):
+    base = Path(args.base)
+    try:
+        contacts = load_contacts(base)
+        expected_dirs = ["inbox", "processing", "archive/processed", "archive/failed", "events", "logs", "tmp", "locks", "state"]
+        dirs = {name: (base / name).is_dir() for name in expected_dirs}
+        malformed_counts = {
+            "inbox": _count_malformed_json(base / "inbox"),
+            "processing": _count_malformed_json(base / "processing"),
+        }
+        report = {
+            "base": str(base),
+            "dirs": dirs,
+            "contacts_count": len(contacts.get("contacts", {})),
+            "inbox_counts": _count_messages_by_agent(base / "inbox"),
+            "processing_counts": _count_messages_by_agent(base / "processing"),
+            "failed_archive_count": len(list((base / "archive" / "failed").glob("*.json"))),
+            "events_files_count": len(list((base / "events").glob("*.jsonl"))),
+            "malformed_json_count": sum(malformed_counts.values()),
+            "malformed_json_counts": malformed_counts,
+        }
+    except Exception as exc:
+        report = {"base": str(base), "ok": False, "error": repr(exc)}
+    else:
+        report["ok"] = True
+    print(json.dumps(report, ensure_ascii=False, indent=2))
 
 
 def cmd_contacts_list(args):
@@ -457,9 +676,21 @@ def build_parser():
     s.set_defaults(func=cmd_queued)
 
     s = sub.add_parser("threads")
-    s.add_argument("--days", type=int, default=7)
+    s.add_argument("--days", type=int, default=30)
     s.add_argument("--contact")
+    s.add_argument("--event-type", action="append")
+    s.add_argument("--failed", action="store_true")
+    s.add_argument("--needs-reply", action="store_true")
     s.set_defaults(func=cmd_threads)
+
+    s = sub.add_parser("timeline")
+    s.add_argument("thread_id")
+    s.add_argument("--days", type=int, default=30)
+    s.add_argument("--markdown", action="store_true")
+    s.set_defaults(func=cmd_timeline)
+
+    s = sub.add_parser("doctor")
+    s.set_defaults(func=cmd_doctor)
 
     contacts = sub.add_parser("contacts")
     csub = contacts.add_subparsers(dest="contacts_cmd", required=True)
