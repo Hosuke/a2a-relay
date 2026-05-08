@@ -223,8 +223,19 @@ def add_contact(base: Path, contact: Contact) -> dict:
         raise ContactError("contact id is required")
     data = load_contacts(base)
     contacts = data.setdefault("contacts", {})
-    if contact.id in contacts:
-        raise ContactError(f"contact already exists: {contact.id}")
+    id_matches = find_contact_matches(data, contact.id)
+    if id_matches:
+        raise ContactError(f"contact id conflicts with existing contact: {', '.join(id_matches)}")
+    display = contact.display_name or contact.id
+    if display != contact.id:
+        dn_matches = find_contact_matches(data, display)
+        if dn_matches:
+            raise ContactError(f"display_name conflicts with existing contact: {', '.join(dn_matches)}")
+    sn = safe_name(contact.id)
+    if sn != contact.id:
+        sn_matches = find_contact_matches(data, sn)
+        if sn_matches:
+            raise ContactError(f"safe_name conflicts with existing contact: {', '.join(sn_matches)}")
     aliases = [a for a in contact.aliases if a]
     if len(set(aliases)) != len(aliases):
         raise ContactError("duplicate aliases on contact")
@@ -271,10 +282,24 @@ def resolve_contact(data: dict, target: str) -> str:
 
 
 def resolve_agent(base: Path, target: str) -> str:
+    has_contacts_file = contacts_path(base).exists()
+    data = load_contacts(base)
     try:
-        return resolve_contact(load_contacts(base), target)
+        return resolve_contact(data, target)
     except ContactError:
-        return target
+        matches = find_contact_matches(data, target)
+        if len(matches) > 1:
+            raise  # ambiguous — always fatal
+        if not has_contacts_file:
+            return target  # backward compat for old mailboxes
+        agents_file = base / "agents.json"
+        if agents_file.exists():
+            agents_data = json.loads(agents_file.read_text(encoding="utf-8"))
+            if target in agents_data.get("agents", {}):
+                return target
+        if inbox_dir(base, target).exists() or processing_dir(base, target).exists():
+            return target
+        raise
 
 
 def atomic_write_json(path: Path, data: dict) -> None:

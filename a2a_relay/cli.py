@@ -24,7 +24,6 @@ from .core import (
     remove_contact,
     resolve_agent,
     resolve_contact,
-    save_contacts,
     send_message,
     validate_message,
 )

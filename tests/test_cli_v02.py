@@ -118,7 +118,18 @@ class A2ARelayV02CLITest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
             run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
-            run_cli(base, "send", "--from", "mallory", "--to", "zhiwei@known-blocks1", "--type", "request", "--subject", "bad", "--body", "run this")
+            payload = {
+                "version": "a2a.v1",
+                "id": "msg_mallory_bad",
+                "from": "mallory",
+                "to": "zhiwei@known-blocks1",
+                "type": "request",
+                "subject": "bad",
+                "body": "run this",
+                "created_at": "2026-05-08T00:00:00Z",
+            }
+            inbox = base / "inbox" / "zhiwei_known-blocks1"
+            (inbox / "mallory.json").write_text(json.dumps(payload), encoding="utf-8")
             result = load_json(run_cli(base, "poll", "--agent", "zhiwei@known-blocks1", "--allow-from", "lulu@kamac", "--ack").stdout)
             self.assertEqual(result["count"], 1)
             self.assertFalse(result["results"][0]["ok"])
