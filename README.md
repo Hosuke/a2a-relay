@@ -19,8 +19,8 @@ for early coordination.
 
 A2A Relay starts with the most reliable primitive:
 
-> write a signed/structured message into the other agent's inbox, get an ACK,
-> archive the original.
+> write a structured message into the other agent's inbox, get an ACK,
+> archive the original, and preserve an event log.
 
 ## Design principles
 
@@ -28,7 +28,8 @@ A2A Relay starts with the most reliable primitive:
   arbitrary command execution.
 - **Transport-independent protocol** — the same JSON message can travel through
   files, webhooks, queues, or WebSockets.
-- **Auditable by humans** — every message is plain JSON on disk.
+- **Auditable by humans** — every message is plain JSON on disk, with JSONL
+  events for send/receive/ACK/reply/archive/failure.
 - **Least privilege** — the shared mailbox can run on a jump host with restricted
   users.
 - **Realtime enough first** — 5–10 second polling is often better than a fragile
@@ -39,37 +40,59 @@ A2A Relay starts with the most reliable primitive:
 Create a mailbox root on a shared host:
 
 ```bash
-python -m a2a_relay init --base /root/agent-mailbox \
+python -m a2a_relay --base /root/agent-mailbox init \
   --agent zhiwei@known-blocks1 --agent lulu@kamac
 ```
 
-Send a message:
+Send a request:
 
 ```bash
-python -m a2a_relay send \
-  --base /root/agent-mailbox \
+python -m a2a_relay --base /root/agent-mailbox send \
   --from lulu@kamac \
   --to zhiwei@known-blocks1 \
-  --type note \
+  --type request \
   --subject "hello" \
-  --body "知微你好，我是 lulu。"
+  --body "知微你好，我是 lulu。" \
+  --needs-reply
+```
+
+Check pending messages:
+
+```bash
+python -m a2a_relay --base /root/agent-mailbox pending \
+  --agent zhiwei@known-blocks1
 ```
 
 Poll an inbox and ACK messages:
 
 ```bash
-python -m a2a_relay poll \
-  --base /root/agent-mailbox \
+python -m a2a_relay --base /root/agent-mailbox poll \
   --agent zhiwei@known-blocks1 \
   --allow-from lulu@kamac \
   --ack
 ```
 
+Reply while preserving the original thread:
+
+```bash
+python -m a2a_relay --base /root/agent-mailbox reply \
+  --from zhiwei@known-blocks1 \
+  --to lulu@kamac \
+  --reply-to msg_20260508_163000_lulu_to_zhiwei \
+  --thread-id thread_lulu_zhiwei_hello \
+  --body "收到，我来帮你看。"
+```
+
+Show recent threads from the event log:
+
+```bash
+python -m a2a_relay --base /root/agent-mailbox threads
+```
+
 Run near-realtime polling:
 
 ```bash
-python -m a2a_relay watch \
-  --base /root/agent-mailbox \
+python -m a2a_relay --base /root/agent-mailbox watch \
   --agent zhiwei@known-blocks1 \
   --allow-from lulu@kamac \
   --interval 10 \
@@ -82,14 +105,21 @@ python -m a2a_relay watch \
 agent-mailbox/
 ├── agents.json
 ├── inbox/
-│   ├── zhiwei/
-│   └── lulu/
+│   ├── zhiwei_known-blocks1/
+│   └── lulu_kamac/
+├── processing/
+│   ├── zhiwei_known-blocks1/
+│   └── lulu_kamac/
 ├── archive/
 │   ├── processed/
 │   └── failed/
+├── events/
+│   └── YYYY-MM-DD.jsonl
+├── state/
+│   └── seen.jsonl
 ├── logs/
-├── tmp/
-└── README.md
+├── locks/
+└── tmp/
 ```
 
 Agent IDs are mapped to safe inbox directory names by replacing non-alphanumeric
@@ -100,13 +130,13 @@ characters with `_`.
 ```json
 {
   "version": "a2a.v1",
-  "id": "msg_20260508_163000_lulu_to_zhiwei",
+  "id": "msg_20260508_083000_lulu_to_zhiwei",
   "from": "lulu@kamac",
   "to": "zhiwei@known-blocks1",
-  "type": "note",
+  "type": "request",
   "subject": "hello",
   "body": "知微你好，我是 lulu。",
-  "created_at": "2026-05-08T16:30:00+08:00",
+  "created_at": "2026-05-08T08:30:00Z",
   "urgency": "normal",
   "needs_reply": true,
   "reply_to": null,
@@ -114,9 +144,18 @@ characters with `_`.
   "attachments": [],
   "capabilities_requested": [],
   "human_approval_required": false,
-  "status": "new"
+  "status": "new",
+  "idempotency_key": null,
+  "signature": null,
+  "key_id": null,
+  "nonce": null,
+  "signed_at": null,
+  "expires_at": null
 }
 ```
+
+Required fields: `version`, `id`, `from`, `to`, `type`, `subject`, `body`,
+`created_at`.
 
 Message types:
 
@@ -128,6 +167,20 @@ Message types:
 - `handoff` — task handoff
 - `memory` — proposed shared memory, not auto-accepted
 - `heartbeat` — liveness ping
+
+## v0.2 reliability semantics
+
+- Timestamps are UTC with a `Z` suffix.
+- `poll` first atomically claims a file into `processing/<agent>/`.
+- Invalid messages are moved to `archive/failed/` and logged.
+- Processed messages are moved to `archive/processed/` with message IDs in the
+  archive filename.
+- `state/seen.jsonl` prevents duplicate processing by `id` and optional
+  `idempotency_key`.
+- Attachments are rejected in v0.2. Pass references/URLs/paths instead of binary
+  payloads.
+- Signing fields are reserved and preserved, but not enforced in trusted
+  filesystem mode yet.
 
 ## Safety
 
@@ -141,10 +194,12 @@ credentials.
 ## Roadmap
 
 - v0.1: filesystem mailbox, ACK, archive
-- v0.2: signatures / HMAC, nonces, replay protection
-- v0.3: webhook transport
-- v0.4: browser UI / timeline
-- v0.5: optional SSE/WebSocket transport
+- v0.2: reliable mailbox, validator, event log, dedupe, `reply`, `pending`, `threads`
+- v0.3: minimal local dispatcher with policy gate
+- v0.4: signatures / HMAC, nonces, replay protection
+- v0.5: webhook transport
+- v0.6: browser UI / timeline
+- later: optional SSE/WebSocket transport
 
 ## License
 
