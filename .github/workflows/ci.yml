@@ -1,0 +1,16 @@
+name: ci
+on:
+  push:
+  pull_request:
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m py_compile a2a_relay/*.py
+      - run: python -m a2a_relay --base /tmp/a2a init --agent lulu@kamac --agent zhiwei@known-blocks1
+      - run: python -m a2a_relay --base /tmp/a2a send --from lulu@kamac --to zhiwei@known-blocks1 --subject hi --body hello
+      - run: python -m a2a_relay --base /tmp/a2a poll --agent zhiwei@known-blocks1 --allow-from lulu@kamac --ack
