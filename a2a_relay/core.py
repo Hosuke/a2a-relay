@@ -199,7 +199,7 @@ def list_messages(base: Path, agent_id: str) -> list[Path]:
 def claim_message(base: Path, agent_id: str, path: Path) -> Path | None:
     dest_dir = processing_dir(base, agent_id)
     dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / path.name
+    dest = dest_dir / f"{path.stem}_{uuid.uuid4().hex[:8]}{path.suffix}"
     try:
         path.replace(dest)
     except FileNotFoundError:

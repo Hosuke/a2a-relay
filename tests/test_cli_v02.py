@@ -91,6 +91,29 @@ class A2ARelayV02CLITest(unittest.TestCase):
             self.assertTrue(result["results"][0]["duplicate"])
             self.assertIsNone(result["results"][0].get("ack"))
 
+    def test_same_filename_claim_does_not_overwrite_processing_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "mailbox"
+            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
+            inbox = base / "inbox" / "zhiwei_known-blocks1"
+            processing = base / "processing" / "zhiwei_known-blocks1"
+            existing = processing / "same_deadbeef.json"
+            existing.write_text("do-not-overwrite", encoding="utf-8")
+            payload = {
+                "version": "a2a.v1",
+                "id": "msg_same",
+                "from": "lulu@kamac",
+                "to": "zhiwei@known-blocks1",
+                "type": "request",
+                "subject": "same",
+                "body": "hello",
+                "created_at": "2026-05-08T00:00:00Z",
+            }
+            (inbox / "same.json").write_text(json.dumps(payload), encoding="utf-8")
+            result = load_json(run_cli(base, "poll", "--agent", "zhiwei@known-blocks1", "--allow-from", "lulu@kamac").stdout)
+            self.assertEqual(result["count"], 1)
+            self.assertEqual(existing.read_text(encoding="utf-8"), "do-not-overwrite")
+
     def test_invalid_sender_goes_to_failed_archive(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
