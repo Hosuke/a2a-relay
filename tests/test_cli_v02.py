@@ -135,6 +135,132 @@ class A2ARelayV02CLITest(unittest.TestCase):
             self.assertFalse(result["results"][0]["ok"])
             self.assertTrue(list((base / "archive" / "failed").glob("*.json")))
 
+    def test_threads_include_operator_fields_and_filters(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "mailbox"
+            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
+            sent = run_cli(
+                base,
+                "send",
+                "--from", "lulu@kamac",
+                "--to", "zhiwei@known-blocks1",
+                "--type", "request",
+                "--subject", "needs triage",
+                "--body", "SECRET_THREAD_BODY",
+                "--needs-reply",
+            )
+            msg_path = Path(sent.stdout.strip())
+            msg = json.loads(msg_path.read_text(encoding="utf-8"))
+
+            threads = load_json(run_cli(base, "threads", "--needs-reply", "--event-type", "sent").stdout)
+            row = next(item for item in threads["threads"] if item["thread_id"] == msg["thread_id"])
+
+            self.assertEqual(row["events"], 1)
+            self.assertIsNotNone(row["first_timestamp"])
+            self.assertIsNotNone(row["last_timestamp"])
+            self.assertEqual(row["last_event"], "sent")
+            self.assertEqual(row["participants"], ["lulu@kamac", "zhiwei@known-blocks1"])
+            self.assertEqual(row["message_ids"], [msg["id"]])
+            self.assertFalse(row["failed"])
+            self.assertEqual(row["pending_count"], 1)
+            self.assertEqual(row["queued_count"], 0)
+            self.assertTrue(row["needs_reply"])
+            self.assertNotIn("SECRET_THREAD_BODY", json.dumps(threads))
+
+            archived_only = load_json(run_cli(base, "threads", "--event-type", "archived").stdout)
+            self.assertEqual(archived_only["count"], 0)
+
+    def test_threads_failed_filter_uses_failure_events(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "mailbox"
+            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
+            payload = {
+                "version": "a2a.v1",
+                "id": "msg_mallory_bad",
+                "from": "mallory",
+                "to": "zhiwei@known-blocks1",
+                "type": "request",
+                "subject": "bad",
+                "body": "SECRET_FAILED_BODY",
+                "created_at": "2026-05-08T00:00:00Z",
+                "thread_id": "thread_failed",
+            }
+            inbox = base / "inbox" / "zhiwei_known-blocks1"
+            (inbox / "mallory.json").write_text(json.dumps(payload), encoding="utf-8")
+            run_cli(base, "poll", "--agent", "zhiwei@known-blocks1", "--allow-from", "lulu@kamac")
+
+            threads = load_json(run_cli(base, "threads", "--failed").stdout)
+
+            self.assertEqual(threads["count"], 1)
+            self.assertEqual(threads["threads"][0]["thread_id"], "thread_failed")
+            self.assertTrue(threads["threads"][0]["failed"])
+            self.assertNotIn("SECRET_FAILED_BODY", json.dumps(threads))
+
+    def test_timeline_json_and_markdown_do_not_echo_body(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "mailbox"
+            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
+            sent = run_cli(
+                base,
+                "send",
+                "--from", "lulu@kamac",
+                "--to", "zhiwei@known-blocks1",
+                "--type", "request",
+                "--subject", "timeline",
+                "--body", "SECRET_TIMELINE_BODY",
+            )
+            msg = json.loads(Path(sent.stdout.strip()).read_text(encoding="utf-8"))
+
+            timeline = load_json(run_cli(base, "timeline", msg["thread_id"]).stdout)
+            markdown = run_cli(base, "timeline", msg["thread_id"], "--markdown").stdout
+
+            self.assertEqual(timeline["count"], 1)
+            self.assertEqual(set(timeline["events"][0]), {"timestamp", "event_type", "actor", "message_id", "from", "to"})
+            self.assertNotIn("body", json.dumps(timeline))
+            self.assertNotIn("SECRET_TIMELINE_BODY", json.dumps(timeline))
+            self.assertIn("# Timeline", markdown)
+            self.assertIn("- ", markdown)
+            self.assertNotIn("SECRET_TIMELINE_BODY", markdown)
+
+    def test_doctor_reports_malformed_processing_without_failure_exit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "mailbox"
+            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
+            bad = base / "processing" / "lulu_kamac" / "bad.json"
+            bad.write_text("{not valid json", encoding="utf-8")
+
+            result = run_cli(base, "doctor")
+            report = load_json(result.stdout)
+
+            self.assertEqual(result.returncode, 0)
+            self.assertTrue(report["ok"])
+            self.assertEqual(report["contacts_count"], 2)
+            self.assertEqual(report["malformed_json_count"], 1)
+            self.assertEqual(report["malformed_json_counts"]["processing"], 1)
+            self.assertEqual(report["processing_counts"]["lulu_kamac"], 1)
+
+    def test_threads_tolerate_legacy_naive_event_timestamp(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "mailbox"
+            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
+            events = base / "events" / "2026-05-08.jsonl"
+            events.write_text(json.dumps({
+                "event_id": "evt_legacy",
+                "event_type": "sent",
+                "timestamp": "2026-05-08T00:00:00",
+                "actor": "lulu@kamac",
+                "message_id": "msg_legacy",
+                "thread_id": "thread_legacy",
+                "from": "lulu@kamac",
+                "to": "zhiwei@known-blocks1",
+            }) + "\n", encoding="utf-8")
+
+            result = run_cli(base, "threads", "--days", "9999")
+            output = load_json(result.stdout)
+
+            self.assertEqual(output["count"], 1)
+            self.assertEqual(output["threads"][0]["thread_id"], "thread_legacy")
+
     def test_oversized_body_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"

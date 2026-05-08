@@ -109,6 +109,18 @@ python -m a2a_relay --base /root/agent-mailbox pending \
 
 These commands intentionally show metadata only and do not echo message bodies.
 
+For operator triage across private threads, use:
+
+```bash
+python -m a2a_relay --base /root/agent-mailbox threads --needs-reply
+python -m a2a_relay --base /root/agent-mailbox threads --failed
+python -m a2a_relay --base /root/agent-mailbox timeline thread_...
+python -m a2a_relay --base /root/agent-mailbox doctor
+```
+
+`timeline` emits event metadata only. `threads --needs-reply` is live-only and
+conservative because archived event records do not include `needs_reply`.
+
 ## Dispatcher Integration
 
 The dispatcher is for policy-gated local auto-replies. Configure

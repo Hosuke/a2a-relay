@@ -69,6 +69,46 @@ python -m a2a_relay --base /root/agent-mailbox queued \
 path, id, from, to, type, subject, thread_id, needs_reply, and
 human_approval_required. They do not print message bodies.
 
+## Inspect Threads And Health
+
+List recent private threads from the event log:
+
+```bash
+python -m a2a_relay --base /root/agent-mailbox threads
+```
+
+Useful operator filters:
+
+```bash
+python -m a2a_relay --base /root/agent-mailbox threads --contact lulu
+python -m a2a_relay --base /root/agent-mailbox threads --failed
+python -m a2a_relay --base /root/agent-mailbox threads --needs-reply
+python -m a2a_relay --base /root/agent-mailbox threads --event-type sent
+```
+
+`--needs-reply` is conservative: the event log does not store `needs_reply`, so
+the command infers it only from current `inbox/` and `processing/` messages with
+`needs_reply=true` or `type=request`. `--failed` is a thread-level predicate
+computed from all events in the selected time window, even if `--event-type`
+filters the row's counted events.
+
+For a single thread, show metadata-only events as JSON or Markdown:
+
+```bash
+python -m a2a_relay --base /root/agent-mailbox timeline thread_lulu_zhiwei_hello
+python -m a2a_relay --base /root/agent-mailbox timeline thread_lulu_zhiwei_hello --markdown
+```
+
+For a quick mailbox health check:
+
+```bash
+python -m a2a_relay --base /root/agent-mailbox doctor
+```
+
+`doctor` reports expected directory presence, contact count, per-agent inbox and
+processing counts, failed archives, event files, and malformed JSON in live
+message directories.
+
 ## Poll And ACK
 
 Poll claims messages atomically into `processing/<agent>/`, validates them, logs

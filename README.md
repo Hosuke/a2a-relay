@@ -130,6 +130,41 @@ Show recent threads from the event log:
 python -m a2a_relay --base /root/agent-mailbox threads
 ```
 
+Operator filters can narrow the thread list:
+
+```bash
+python -m a2a_relay --base /root/agent-mailbox threads --contact lulu
+python -m a2a_relay --base /root/agent-mailbox threads --event-type dispatch_failed
+python -m a2a_relay --base /root/agent-mailbox threads --failed
+python -m a2a_relay --base /root/agent-mailbox threads --needs-reply
+```
+
+`threads` prints JSON rows with thread id, event counts, first/last timestamps,
+last event, participants, message ids, failure state, live inbox/processing
+counts, and `needs_reply`. Because historical event JSONL does not record
+`needs_reply`, that flag is inferred conservatively only from live
+`inbox/`/`processing/` messages where `needs_reply=true` or `type=request`.
+Message bodies are not printed. The `--failed` filter is a thread-level
+predicate: it is computed from all events in the selected time window, even when
+`--event-type` narrows which events are counted in the row.
+
+Show a metadata-only timeline for one thread:
+
+```bash
+python -m a2a_relay --base /root/agent-mailbox timeline thread_lulu_zhiwei_hello
+python -m a2a_relay --base /root/agent-mailbox timeline thread_lulu_zhiwei_hello --markdown
+```
+
+Run a mailbox health summary:
+
+```bash
+python -m a2a_relay --base /root/agent-mailbox doctor
+```
+
+`doctor` reports mailbox directory presence, contact count, inbox and
+processing counts, failed archive count, event file count, and malformed JSON
+counts in `inbox/` and `processing/`.
+
 Run near-realtime polling:
 
 ```bash
