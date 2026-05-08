@@ -12,6 +12,9 @@ from typing import Any
 
 from .core import (
     ContactError,
+    RelayConfig,
+    ValidationError,
+    validate_message,
     has_seen,
     load_contacts,
     log_event,
@@ -42,6 +45,11 @@ def get_action(config: dict, name: str) -> dict | None:
 
 def check_policy_gate(base: Path, msg: dict, agent_id: str, config: dict) -> tuple[bool, str]:
     """Return (eligible, reason). If not eligible, reason explains why."""
+    try:
+        validate_message(msg, config=RelayConfig())
+    except ValidationError as exc:
+        return False, str(exc)
+
     policy = get_agent_policy(config, agent_id)
     if policy is None:
         return False, "no_dispatcher_policy_for_agent"

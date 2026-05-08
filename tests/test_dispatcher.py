@@ -154,6 +154,19 @@ class TestDispatcherPolicyGate(unittest.TestCase):
         reply = json.loads(reply_path.read_text(encoding="utf-8"))
         self.assertEqual(reply["body"], "safe_reply")
 
+    def test_self_message_skipped_before_subprocess(self):
+        base = self._setup_mailbox()
+        make_dispatcher_config(base, "zhiwei@known-blocks1", "echo",
+                               [sys.executable, "-c", ECHO_SCRIPT],
+                               allowed_from=["zhiwei@known-blocks1"])
+        msg = make_request_msg(sender="zhiwei@known-blocks1", recipient="zhiwei@known-blocks1")
+
+        result = dispatch_message(base, msg, "zhiwei@known-blocks1")
+
+        self.assertFalse(result["dispatched"])
+        self.assertEqual(result["reason"], "self messages are not allowed")
+        self.assertEqual(list(inbox_dir(base, "zhiwei@known-blocks1").glob("*.json")), [])
+
     def test_reply_type_skipped(self):
         base = self._setup_mailbox()
         make_dispatcher_config(base, "zhiwei@known-blocks1", "echo",
