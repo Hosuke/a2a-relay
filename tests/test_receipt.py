@@ -12,7 +12,16 @@ CLI = [sys.executable, "-m", "a2a_relay"]
 
 sys.path.insert(0, str(ROOT))
 
-from a2a_relay.core import Contact, add_contact, claim_message, inbox_dir, init_mailbox, make_message, send_message
+from a2a_relay.core import (
+    Contact,
+    add_contact,
+    claim_message,
+    inbox_dir,
+    init_mailbox,
+    make_message,
+    processing_dir,
+    send_message,
+)
 
 
 def run_cli(base: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
@@ -33,6 +42,10 @@ class ReceiptCLITest(unittest.TestCase):
     def _setup_mailbox(self, tmp: str) -> Path:
         base = Path(tmp) / "mailbox"
         init_mailbox(base, ["lulu@kamac"])
+        contacts_path = base / "contacts.json"
+        contacts = json.loads(contacts_path.read_text(encoding="utf-8"))
+        contacts["contacts"]["lulu@kamac"]["aliases"] = ["lulu"]
+        contacts_path.write_text(json.dumps(contacts), encoding="utf-8")
         add_contact(base, Contact(id="zhiwei@known-blocks1", aliases=["possum"]))
         return base
 
@@ -155,6 +168,77 @@ class ReceiptCLITest(unittest.TestCase):
             self.assertTrue(output["results"][0]["ok"])
             self.assertEqual(output["results"][0]["type"], "status")
             self.assertEqual(list(inbox_dir(base, "zhiwei@known-blocks1").glob("*.json")), [])
+
+    def test_pending_without_include_processing_is_inbox_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = self._setup_mailbox(tmp)
+            send_message(base, make_message("zhiwei@known-blocks1", "lulu@kamac", "note", "inbox note", "INBOX_BODY"))
+            request_path = send_message(
+                base,
+                make_message("zhiwei@known-blocks1", "lulu@kamac", "request", "queued request", "SECRET_QUEUED_BODY"),
+            )
+            self.assertIsNotNone(claim_message(base, "lulu@kamac", request_path))
+
+            result = run_cli(base, "pending", "--agent", "lulu")
+            output = load_json(result.stdout)
+
+            self.assertEqual(output["count"], 1)
+            self.assertEqual(output["messages"][0]["subject"], "inbox note")
+            self.assertNotIn("queued request", result.stdout)
+            self.assertNotIn("SECRET_QUEUED_BODY", result.stdout)
+
+    def test_pending_include_processing_shows_queued_request(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = self._setup_mailbox(tmp)
+            request_path = send_message(
+                base,
+                make_message("zhiwei@known-blocks1", "lulu@kamac", "request", "queued request", "SECRET_QUEUED_BODY"),
+            )
+            claimed = claim_message(base, "lulu@kamac", request_path)
+            self.assertIsNotNone(claimed)
+
+            result = run_cli(base, "pending", "--agent", "lulu", "--include-processing")
+            output = load_json(result.stdout)
+
+            self.assertEqual(output["count"], 1)
+            self.assertEqual(output["messages"][0]["type"], "request")
+            self.assertEqual(output["messages"][0]["subject"], "queued request")
+            self.assertEqual(output["messages"][0]["needs_reply"], False)
+            self.assertEqual(output["messages"][0]["human_approval_required"], False)
+            self.assertNotIn("SECRET_QUEUED_BODY", result.stdout)
+
+    def test_queued_command_shows_processing_messages(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = self._setup_mailbox(tmp)
+            request_path = send_message(
+                base,
+                make_message("zhiwei@known-blocks1", "lulu@kamac", "request", "queued command", "SECRET_QUEUED_BODY"),
+            )
+            claimed = claim_message(base, "lulu@kamac", request_path)
+            self.assertIsNotNone(claimed)
+
+            result = run_cli(base, "queued", "--agent", "lulu")
+            output = load_json(result.stdout)
+
+            self.assertEqual(output["count"], 1)
+            self.assertEqual(output["messages"][0]["path"], str(claimed))
+            self.assertEqual(output["messages"][0]["subject"], "queued command")
+            self.assertNotIn("SECRET_QUEUED_BODY", result.stdout)
+
+    def test_malformed_processing_is_visible_as_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = self._setup_mailbox(tmp)
+            bad_path = processing_dir(base, "lulu@kamac") / "bad.json"
+            bad_path.write_text("{not valid json", encoding="utf-8")
+
+            result = run_cli(base, "queued", "--agent", "lulu")
+            output = load_json(result.stdout)
+
+            self.assertEqual(output["count"], 1)
+            self.assertFalse(output["messages"][0]["ok"])
+            self.assertEqual(output["messages"][0]["path"], str(bad_path))
+            self.assertIn("JSONDecodeError", output["messages"][0]["error"])
+
     def test_recover_processing_can_finish_archivable_message_after_restart(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = self._setup_mailbox(tmp)
