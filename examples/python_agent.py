@@ -93,7 +93,7 @@ def main() -> None:
         base = Path(tmp) / "agent-mailbox"
 
         init_mailbox(base, ["worker@example", "operator@example"])
-        add_contact(base, Contact(id="operator@localhost", aliases=["operator"]))
+        add_contact(base, Contact(id="operator@example", aliases=["operator"]))
 
         request = make_message(
             "worker@example",

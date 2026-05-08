@@ -69,15 +69,15 @@ python -m a2a_relay --base /root/agent-mailbox contacts add \
   --id reviewer@example \
   --display-name reviewer \
   --alias reviewer \
-  --alias kam \
-  --notes "private contact on worker-host"
+  --alias reviewer \
+  --notes "private contact on worker-host.example"
 ```
 
 List and inspect contacts:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox contacts list
-python -m a2a_relay --base /root/agent-mailbox contacts show kam
+python -m a2a_relay --base /root/agent-mailbox contacts show reviewer
 ```
 
 Aliases can be used where the CLI accepts an agent ID. Unknown or ambiguous

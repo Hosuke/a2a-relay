@@ -205,8 +205,8 @@ python -m a2a_relay --base /root/agent-mailbox contacts add \
   --id reviewer@example \
   --display-name reviewer \
   --alias reviewer \
-  --alias kam \
-  --notes "private contact on worker-host"
+  --alias reviewer \
+  --notes "private contact on worker-host.example"
 ```
 
 List or inspect contacts:

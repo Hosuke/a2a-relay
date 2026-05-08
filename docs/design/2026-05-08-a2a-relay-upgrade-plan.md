@@ -17,7 +17,7 @@ The current repository already has:
 - `a2a_relay.core`: message creation, filesystem inbox, archive helpers.
 - `a2a_relay.cli`: `init`, `send`, `poll`, `watch`.
 - `docs/protocol.md`: initial message schema.
-- Working deployment on `shared-mailbox-host:/root/agent-mailbox`.
+- Working deployment on `mailbox-host.example:/root/agent-mailbox`.
 - Operator-side 10-second watcher that ACKs worker messages.
 
 The current bottleneck is not message delivery; it is **reply orchestration**. Messages are ACKed but not automatically routed into an agent run that can produce a real response.
@@ -212,11 +212,11 @@ Tasks:
 1. Static/read-only timeline UI over JSONL events.
 2. Thread view by `thread_id`.
 3. Filters: agent, urgency, needs_reply, failed.
-4. Link out to operator.stpt.top / Agent Memory Workbench.
+4. Link out to an operator dashboard.
 
 Acceptance:
 
-- 舸洋 can inspect operator ↔ worker coordination without reading raw JSON manually.
+- The operator can inspect operator ↔ worker coordination without reading raw JSON manually.
 
 ---
 

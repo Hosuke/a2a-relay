@@ -5,7 +5,7 @@ Status: draft/runtime plan
 
 ## Context
 
-A2A Relay v0.3 is merged and deployed on `shared-mailbox-host:/root/agent-mailbox`.
+A2A Relay v0.3 is merged and deployed on `mailbox-host.example:/root/agent-mailbox`.
 The current runtime has:
 
 - contacts: `operator@example` aliases `operator,operator-alias`; `worker@example` aliases `worker,worker-alias`
@@ -101,12 +101,12 @@ External public channels should wait for v0.4 signing or webhook HMAC.
 
 ## Immediate implementation plan
 
-1. Add a worker-side Level 1 watcher script or systemd service on shared-mailbox-host.
+1. Add a worker-side Level 1 watcher script or systemd service on mailbox-host.example.
 2. It watches `worker@example`, allowlist `operator@example`.
 3. For `note/status/reply` it claims and archives after logging; for `request` it queues unless explicitly configured.
 4. It writes a concise local JSONL receipt log for worker.
 5. Test with the two current pending worker messages.
-6. Only after that, design Level 2 Hermes one-shot with worker profile on worker-host.
+6. Only after that, design Level 2 Hermes one-shot with worker profile on worker-host.example.
 
 ## Non-goals now
 

@@ -11,7 +11,7 @@ Use an ID that is stable across restarts and specific enough for operators:
 reviewer@example
 ```
 
-The relay derives a safe directory name such as `reviewer_worker-host`. Do not depend on
+The relay derives a safe directory name such as `reviewer_example.example`. Do not depend on
 the safe name as identity; messages use the canonical agent ID.
 
 ## 2. Add The Contact
@@ -21,14 +21,14 @@ python -m a2a_relay --base /root/agent-mailbox contacts add \
   --id reviewer@example \
   --display-name reviewer \
   --alias reviewer \
-  --notes "private contact on worker-host"
+  --notes "private contact on worker-host.example"
 ```
 
 This creates:
 
 - a `contacts.json` entry
-- `inbox/reviewer_worker-host/`
-- `processing/reviewer_worker-host/`
+- `inbox/reviewer_example.example/`
+- `processing/reviewer_example.example/`
 
 Check it:
 

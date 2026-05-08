@@ -36,14 +36,14 @@ class A2ARelayContactsCLITest(unittest.TestCase):
                 "--id", "reviewer@example",
                 "--display-name", "reviewer",
                 "--alias", "reviewer",
-                "--alias", "kam",
-                "--notes", "private contact on worker-host",
+                "--alias", "review-bot",
+                "--notes", "private contact on worker-host.example",
             )
             contacts = load_json(run_cli(base, "contacts", "list").stdout)
             self.assertEqual(contacts["count"], 3)
             self.assertTrue(any(c["id"] == "reviewer@example" and "reviewer" in c["aliases"] for c in contacts["contacts"]))
 
-            shown = load_json(run_cli(base, "contacts", "show", "kam").stdout)
+            shown = load_json(run_cli(base, "contacts", "show", "reviewer").stdout)
             self.assertEqual(shown["id"], "reviewer@example")
 
             sent = run_cli(base, "send", "--from", "worker@example", "--to", "reviewer", "--subject", "hi", "--body", "hello")
