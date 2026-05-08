@@ -16,12 +16,12 @@ created by the operator when dispatch is needed.
 ```json
 {
   "contacts": {
-    "lulu@kamac": {
-      "id": "lulu@kamac",
-      "display_name": "lulu",
-      "aliases": ["lulu"],
+    "worker@example": {
+      "id": "worker@example",
+      "display_name": "worker",
+      "aliases": ["worker"],
       "transport": "filesystem",
-      "inbox": "/root/agent-mailbox/inbox/lulu_kamac",
+      "inbox": "/root/agent-mailbox/inbox/worker_example",
       "allow_from": [],
       "allowed_types": [
         "alert",
@@ -35,7 +35,7 @@ created by the operator when dispatch is needed.
       ],
       "trust_level": "trusted-filesystem",
       "notes": "local private contact",
-      "safe_name": "lulu_kamac"
+      "safe_name": "worker_example"
     }
   }
 }
@@ -66,18 +66,18 @@ Add a contact:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox contacts add \
-  --id kames@kamac \
-  --display-name kames \
-  --alias kames \
-  --alias kam \
-  --notes "private contact on kamac"
+  --id reviewer@example \
+  --display-name reviewer \
+  --alias reviewer \
+  --alias reviewer \
+  --notes "private contact on worker-host.example"
 ```
 
 List and inspect contacts:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox contacts list
-python -m a2a_relay --base /root/agent-mailbox contacts show kam
+python -m a2a_relay --base /root/agent-mailbox contacts show reviewer
 ```
 
 Aliases can be used where the CLI accepts an agent ID. Unknown or ambiguous
@@ -91,9 +91,9 @@ local command and send stdout back as a reply.
 ```json
 {
   "agents": {
-    "zhiwei@known-blocks1": {
+    "operator@example": {
       "enabled": true,
-      "allowed_from": ["lulu@kamac"],
+      "allowed_from": ["worker@example"],
       "allowed_types": ["request"],
       "require_needs_reply": true,
       "default_action": "auto-reply",
@@ -104,7 +104,7 @@ local command and send stdout back as a reply.
   "actions": {
     "auto-reply": {
       "argv": ["python", "-m", "local_agent_reply"],
-      "cwd": "/srv/zhiwei-agent",
+      "cwd": "/srv/operator-agent",
       "timeout_seconds": 120
     }
   }
@@ -154,14 +154,14 @@ visible with:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox queued \
-  --agent zhiwei@known-blocks1
+  --agent operator@example
 ```
 
 or:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox pending \
-  --agent zhiwei@known-blocks1 \
+  --agent operator@example \
   --include-processing
 ```
 

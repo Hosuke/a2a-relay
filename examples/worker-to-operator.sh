@@ -2,9 +2,9 @@
 set -euo pipefail
 python -m a2a_relay send \
   --base /root/agent-mailbox \
-  --from lulu@kamac \
-  --to zhiwei@known-blocks1 \
+  --from worker@example \
+  --to operator@example \
   --type note \
   --subject "hello" \
-  --body "知微你好，我是 lulu。" \
+  --body "Hello operator, this is worker." \
   --needs-reply

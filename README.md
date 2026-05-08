@@ -60,18 +60,18 @@ Create a mailbox root on a shared host:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox init \
-  --agent zhiwei@known-blocks1 --agent lulu@kamac
+  --agent operator@example --agent worker@example
 ```
 
 Send a request:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox send \
-  --from lulu@kamac \
-  --to zhiwei@known-blocks1 \
+  --from worker@example \
+  --to operator@example \
   --type request \
   --subject "hello" \
-  --body "知微你好，我是 lulu。" \
+  --body "Hello operator, this is worker." \
   --needs-reply
 ```
 
@@ -79,7 +79,7 @@ Check pending messages:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox pending \
-  --agent zhiwei@known-blocks1
+  --agent operator@example
 ```
 
 Show pending inbox messages plus messages already claimed for human/operator
@@ -87,7 +87,7 @@ handling:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox pending \
-  --agent zhiwei \
+  --agent operator \
   --include-processing
 ```
 
@@ -95,7 +95,7 @@ List only queued/claimed processing messages for an operator:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox queued \
-  --agent zhiwei
+  --agent operator
 ```
 
 `pending --include-processing` and `queued` resolve contact aliases for
@@ -108,8 +108,8 @@ Poll an inbox and ACK messages:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox poll \
-  --agent zhiwei@known-blocks1 \
-  --allow-from lulu@kamac \
+  --agent operator@example \
+  --allow-from worker@example \
   --ack
 ```
 
@@ -117,10 +117,10 @@ Reply while preserving the original thread:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox reply \
-  --from zhiwei@known-blocks1 \
-  --to lulu@kamac \
-  --reply-to msg_20260508_163000_lulu_to_zhiwei \
-  --thread-id thread_lulu_zhiwei_hello \
+  --from operator@example \
+  --to worker@example \
+  --reply-to msg_20260508_163000_worker_to_operator \
+  --thread-id thread_worker_operator_hello \
   --body "收到，我来帮你看。"
 ```
 
@@ -133,7 +133,7 @@ python -m a2a_relay --base /root/agent-mailbox threads
 Operator filters can narrow the thread list:
 
 ```bash
-python -m a2a_relay --base /root/agent-mailbox threads --contact lulu
+python -m a2a_relay --base /root/agent-mailbox threads --contact worker
 python -m a2a_relay --base /root/agent-mailbox threads --event-type dispatch_failed
 python -m a2a_relay --base /root/agent-mailbox threads --failed
 python -m a2a_relay --base /root/agent-mailbox threads --needs-reply
@@ -151,8 +151,8 @@ predicate: it is computed from all events in the selected time window, even when
 Show a metadata-only timeline for one thread:
 
 ```bash
-python -m a2a_relay --base /root/agent-mailbox timeline thread_lulu_zhiwei_hello
-python -m a2a_relay --base /root/agent-mailbox timeline thread_lulu_zhiwei_hello --markdown
+python -m a2a_relay --base /root/agent-mailbox timeline thread_worker_operator_hello
+python -m a2a_relay --base /root/agent-mailbox timeline thread_worker_operator_hello --markdown
 ```
 
 Run a mailbox health summary:
@@ -169,8 +169,8 @@ Run near-realtime polling:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox watch \
-  --agent zhiwei@known-blocks1 \
-  --allow-from lulu@kamac \
+  --agent operator@example \
+  --allow-from worker@example \
   --interval 10 \
   --ack
 ```
@@ -179,8 +179,8 @@ Run a safe receipt watcher without dispatching:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox receipt \
-  --agent lulu \
-  --allow-from possum \
+  --agent worker \
+  --allow-from operator-alias \
   --once \
   --json
 ```
@@ -192,8 +192,8 @@ human handling by default; use `--archive-requests-too` only for smoke tests.
 Messages with `human_approval_required=true` are always queued in `processing/`.
 Use `--recover-processing` after watcher restarts to re-report or finish
 messages that were already claimed before a crash. The receipt watcher does not
-execute message bodies, run subprocesses, call
-Hermes, or send recursive ACK/status messages.
+The receipt watcher does not invoke agent runners, subprocesses, shell commands,
+or send recursive ACK/status messages.
 
 ## Private contacts
 
@@ -202,26 +202,26 @@ them as contacts with stable IDs and optional aliases:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox contacts add \
-  --id kames@kamac \
-  --display-name kames \
-  --alias kames \
-  --alias kam \
-  --notes "private contact on kamac"
+  --id reviewer@example \
+  --display-name reviewer \
+  --alias reviewer \
+  --alias reviewer \
+  --notes "private contact on worker-host.example"
 ```
 
 List or inspect contacts:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox contacts list
-python -m a2a_relay --base /root/agent-mailbox contacts show kames
+python -m a2a_relay --base /root/agent-mailbox contacts show reviewer
 ```
 
 Aliases can be used where an agent ID is accepted:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox send \
-  --from lulu@kamac \
-  --to kames \
+  --from worker@example \
+  --to reviewer \
   --subject "hello" \
   --body "私聊测试。"
 ```
@@ -235,11 +235,11 @@ agent-mailbox/
 ├── agents.json
 ├── contacts.json
 ├── inbox/
-│   ├── zhiwei_known-blocks1/
-│   └── lulu_kamac/
+│   ├── operator_example/
+│   └── worker_example/
 ├── processing/
-│   ├── zhiwei_known-blocks1/
-│   └── lulu_kamac/
+│   ├── operator_example/
+│   └── worker_example/
 ├── archive/
 │   ├── processed/
 │   └── failed/
@@ -270,17 +270,17 @@ These fields are reserved for future policy enforcement and can be set now via
 ```json
 {
   "version": "a2a.v1",
-  "id": "msg_20260508_083000_lulu_to_zhiwei",
-  "from": "lulu@kamac",
-  "to": "zhiwei@known-blocks1",
+  "id": "msg_20260508_083000_worker_to_operator",
+  "from": "worker@example",
+  "to": "operator@example",
   "type": "request",
   "subject": "hello",
-  "body": "知微你好，我是 lulu。",
+  "body": "Hello operator, this is worker.",
   "created_at": "2026-05-08T08:30:00Z",
   "urgency": "normal",
   "needs_reply": true,
   "reply_to": null,
-  "thread_id": "thread_lulu_zhiwei_hello",
+  "thread_id": "thread_worker_operator_hello",
   "attachments": [],
   "capabilities_requested": [],
   "human_approval_required": false,
@@ -335,9 +335,9 @@ command to run.
 ```json
 {
   "agents": {
-    "zhiwei@known-blocks1": {
+    "operator@example": {
       "enabled": true,
-      "allowed_from": ["lulu@kamac"],
+      "allowed_from": ["worker@example"],
       "allowed_types": ["request"],
       "require_needs_reply": true,
       "default_action": "auto-reply",
@@ -348,7 +348,7 @@ command to run.
   "actions": {
     "auto-reply": {
       "argv": ["python", "-m", "local_agent_reply"],
-      "cwd": "/srv/zhiwei-agent",
+      "cwd": "/srv/operator-agent",
       "timeout_seconds": 120
     }
   }
@@ -359,7 +359,7 @@ command to run.
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox dispatch \
-  --agent zhiwei@known-blocks1 \
+  --agent operator@example \
   --action auto-reply \
   --ack
 ```
@@ -368,8 +368,8 @@ python -m a2a_relay --base /root/agent-mailbox dispatch \
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox watch \
-  --agent zhiwei@known-blocks1 \
-  --allow-from lulu@kamac \
+  --agent operator@example \
+  --allow-from worker@example \
   --ack \
   --dispatch-action auto-reply
 ```

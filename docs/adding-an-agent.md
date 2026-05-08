@@ -8,50 +8,50 @@ mailbox. It assumes the mailbox base is `/root/agent-mailbox`.
 Use an ID that is stable across restarts and specific enough for operators:
 
 ```text
-kames@kamac
+reviewer@example
 ```
 
-The relay derives a safe directory name such as `kames_kamac`. Do not depend on
+The relay derives a safe directory name such as `reviewer_example.example`. Do not depend on
 the safe name as identity; messages use the canonical agent ID.
 
 ## 2. Add The Contact
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox contacts add \
-  --id kames@kamac \
-  --display-name kames \
-  --alias kames \
-  --notes "private contact on kamac"
+  --id reviewer@example \
+  --display-name reviewer \
+  --alias reviewer \
+  --notes "private contact on worker-host.example"
 ```
 
 This creates:
 
 - a `contacts.json` entry
-- `inbox/kames_kamac/`
-- `processing/kames_kamac/`
+- `inbox/reviewer_example.example/`
+- `processing/reviewer_example.example/`
 
 Check it:
 
 ```bash
-python -m a2a_relay --base /root/agent-mailbox contacts show kames
+python -m a2a_relay --base /root/agent-mailbox contacts show reviewer
 ```
 
 ## 3. Send A Smoke Test
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox send \
-  --from lulu@kamac \
-  --to kames \
+  --from worker@example \
+  --to reviewer \
   --type note \
   --subject "smoke test" \
-  --body "Hello from lulu."
+  --body "Hello from worker."
 ```
 
 Then inspect pending messages:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox pending \
-  --agent kames
+  --agent reviewer
 ```
 
 ## 4. Choose A Receive Mode
@@ -60,8 +60,8 @@ For human or agent-owned processing:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox poll \
-  --agent kames \
-  --allow-from lulu@kamac \
+  --agent reviewer \
+  --allow-from worker@example \
   --ack
 ```
 
@@ -69,8 +69,8 @@ For low-risk receipt logging without dispatch:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox receipt \
-  --agent kames \
-  --allow-from lulu@kamac \
+  --agent reviewer \
+  --allow-from worker@example \
   --once \
   --json
 ```
@@ -79,8 +79,8 @@ For continuous operation:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox watch \
-  --agent kames \
-  --allow-from lulu@kamac \
+  --agent reviewer \
+  --allow-from worker@example \
   --interval 10 \
   --ack
 ```
@@ -96,20 +96,20 @@ pre-registered local command. Add an agent policy and action to
 ```json
 {
   "agents": {
-    "kames@kamac": {
+    "reviewer@example": {
       "enabled": true,
-      "allowed_from": ["lulu@kamac"],
+      "allowed_from": ["worker@example"],
       "allowed_types": ["request"],
       "require_needs_reply": true,
-      "default_action": "kames-auto-reply",
+      "default_action": "reviewer-auto-reply",
       "max_body_chars": 20000,
       "stdout_max_chars": 12000
     }
   },
   "actions": {
-    "kames-auto-reply": {
-      "argv": ["python", "/srv/kames-agent/reply.py"],
-      "cwd": "/srv/kames-agent",
+    "reviewer-auto-reply": {
+      "argv": ["python", "/srv/reviewer-agent/reply.py"],
+      "cwd": "/srv/reviewer-agent",
       "timeout_seconds": 120
     }
   }
@@ -120,8 +120,8 @@ Run it once:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox dispatch \
-  --agent kames \
-  --allow-from lulu@kamac \
+  --agent reviewer \
+  --allow-from worker@example \
   --ack
 ```
 
@@ -132,12 +132,12 @@ operators because they show metadata only:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox queued \
-  --agent kames
+  --agent reviewer
 ```
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox pending \
-  --agent kames \
+  --agent reviewer \
   --include-processing
 ```
 
@@ -160,7 +160,7 @@ Malformed JSON in `processing/` is reported as an error row instead of crashing.
 Remove a contact entry:
 
 ```bash
-python -m a2a_relay --base /root/agent-mailbox contacts remove kames
+python -m a2a_relay --base /root/agent-mailbox contacts remove reviewer
 ```
 
 This removes the contact record. Review inbox, processing, archive, systemd, and

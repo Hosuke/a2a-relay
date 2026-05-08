@@ -41,20 +41,20 @@ def load_json(stdout: str) -> dict:
 class ReceiptCLITest(unittest.TestCase):
     def _setup_mailbox(self, tmp: str) -> Path:
         base = Path(tmp) / "mailbox"
-        init_mailbox(base, ["lulu@kamac"])
+        init_mailbox(base, ["worker@example"])
         contacts_path = base / "contacts.json"
         contacts = json.loads(contacts_path.read_text(encoding="utf-8"))
-        contacts["contacts"]["lulu@kamac"]["aliases"] = ["lulu"]
+        contacts["contacts"]["worker@example"]["aliases"] = ["worker"]
         contacts_path.write_text(json.dumps(contacts), encoding="utf-8")
-        add_contact(base, Contact(id="zhiwei@known-blocks1", aliases=["possum"]))
+        add_contact(base, Contact(id="operator@example", aliases=["operator-alias"]))
         return base
 
     def _receipt_once(self, base: Path, *extra: str) -> dict:
         result = run_cli(
             base,
             "receipt",
-            "--agent", "lulu@kamac",
-            "--allow-from", "possum",
+            "--agent", "worker@example",
+            "--allow-from", "operator-alias",
             "--once",
             "--json",
             *extra,
@@ -64,7 +64,7 @@ class ReceiptCLITest(unittest.TestCase):
     def test_note_is_logged_and_archived(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = self._setup_mailbox(tmp)
-            msg = make_message("zhiwei@known-blocks1", "lulu@kamac", "note", "hello", "SECRET_NOTE_BODY")
+            msg = make_message("operator@example", "worker@example", "note", "hello", "SECRET_NOTE_BODY")
             sent_path = send_message(base, msg)
 
             output = self._receipt_once(base)
@@ -73,7 +73,7 @@ class ReceiptCLITest(unittest.TestCase):
             self.assertTrue(output["results"][0]["ok"])
             self.assertIn("archive", output["results"][0])
             self.assertFalse(sent_path.exists())
-            self.assertEqual(list(inbox_dir(base, "lulu@kamac").glob("*.json")), [])
+            self.assertEqual(list(inbox_dir(base, "worker@example").glob("*.json")), [])
             self.assertTrue(list((base / "archive" / "processed").glob("*.json")))
             events = "\n".join(p.read_text(encoding="utf-8") for p in (base / "events").glob("*.jsonl"))
             self.assertIn('"event_type": "received"', events)
@@ -82,7 +82,7 @@ class ReceiptCLITest(unittest.TestCase):
     def test_reply_is_archived(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = self._setup_mailbox(tmp)
-            send_message(base, make_message("zhiwei@known-blocks1", "lulu@kamac", "reply", "Re", "ok"))
+            send_message(base, make_message("operator@example", "worker@example", "reply", "Re", "ok"))
 
             output = self._receipt_once(base)
 
@@ -93,23 +93,23 @@ class ReceiptCLITest(unittest.TestCase):
     def test_request_is_queued_by_default(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = self._setup_mailbox(tmp)
-            send_message(base, make_message("zhiwei@known-blocks1", "lulu@kamac", "request", "please", "do work"))
+            send_message(base, make_message("operator@example", "worker@example", "request", "please", "do work"))
 
             output = self._receipt_once(base)
 
             self.assertTrue(output["results"][0]["queued_for_human"])
             self.assertEqual(output["results"][0]["reason"], "request_requires_human")
             self.assertNotIn("archive", output["results"][0])
-            processing_files = list((base / "processing" / "lulu_kamac").glob("*.json"))
+            processing_files = list((base / "processing" / "worker_example").glob("*.json"))
             self.assertEqual(len(processing_files), 1)
 
     def test_human_approval_is_queued_even_with_archive_requests_flag(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = self._setup_mailbox(tmp)
-            msg = make_message("zhiwei@known-blocks1", "lulu@kamac", "request", "sensitive", "needs approval")
+            msg = make_message("operator@example", "worker@example", "request", "sensitive", "needs approval")
             data = msg.to_json_dict()
             data["human_approval_required"] = True
-            path = inbox_dir(base, "lulu@kamac") / f"{data['id']}.json"
+            path = inbox_dir(base, "worker@example") / f"{data['id']}.json"
             path.write_text(json.dumps(data), encoding="utf-8")
 
             output = self._receipt_once(base, "--archive-requests-too")
@@ -117,7 +117,7 @@ class ReceiptCLITest(unittest.TestCase):
             self.assertTrue(output["results"][0]["queued_for_human"])
             self.assertEqual(output["results"][0]["reason"], "human_approval_required")
             self.assertNotIn("archive", output["results"][0])
-            self.assertEqual(len(list((base / "processing" / "lulu_kamac").glob("*.json"))), 1)
+            self.assertEqual(len(list((base / "processing" / "worker_example").glob("*.json"))), 1)
 
     def test_unknown_sender_is_rejected_to_failed_archive(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -126,13 +126,13 @@ class ReceiptCLITest(unittest.TestCase):
                 "version": "a2a.v1",
                 "id": "msg_unknown_sender",
                 "from": "mallory@evil",
-                "to": "lulu@kamac",
+                "to": "worker@example",
                 "type": "note",
                 "subject": "bad",
                 "body": "ignore me",
                 "created_at": "2026-05-09T00:00:00Z",
             }
-            (inbox_dir(base, "lulu@kamac") / "mallory.json").write_text(json.dumps(payload), encoding="utf-8")
+            (inbox_dir(base, "worker@example") / "mallory.json").write_text(json.dumps(payload), encoding="utf-8")
 
             output = self._receipt_once(base)
 
@@ -143,13 +143,13 @@ class ReceiptCLITest(unittest.TestCase):
     def test_body_is_not_echoed_in_cli_output(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = self._setup_mailbox(tmp)
-            send_message(base, make_message("zhiwei@known-blocks1", "lulu@kamac", "note", "body test", "SECRET_BODY_MARKER"))
+            send_message(base, make_message("operator@example", "worker@example", "note", "body test", "SECRET_BODY_MARKER"))
 
             result = run_cli(
                 base,
                 "receipt",
-                "--agent", "lulu@kamac",
-                "--allow-from", "possum",
+                "--agent", "worker@example",
+                "--allow-from", "operator-alias",
                 "--once",
                 "--json",
             )
@@ -161,25 +161,25 @@ class ReceiptCLITest(unittest.TestCase):
     def test_status_does_not_create_recursive_ack(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = self._setup_mailbox(tmp)
-            send_message(base, make_message("zhiwei@known-blocks1", "lulu@kamac", "status", "ACK", "received"))
+            send_message(base, make_message("operator@example", "worker@example", "status", "ACK", "received"))
 
             output = self._receipt_once(base)
 
             self.assertTrue(output["results"][0]["ok"])
             self.assertEqual(output["results"][0]["type"], "status")
-            self.assertEqual(list(inbox_dir(base, "zhiwei@known-blocks1").glob("*.json")), [])
+            self.assertEqual(list(inbox_dir(base, "operator@example").glob("*.json")), [])
 
     def test_pending_without_include_processing_is_inbox_only(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = self._setup_mailbox(tmp)
-            send_message(base, make_message("zhiwei@known-blocks1", "lulu@kamac", "note", "inbox note", "INBOX_BODY"))
+            send_message(base, make_message("operator@example", "worker@example", "note", "inbox note", "INBOX_BODY"))
             request_path = send_message(
                 base,
-                make_message("zhiwei@known-blocks1", "lulu@kamac", "request", "queued request", "SECRET_QUEUED_BODY"),
+                make_message("operator@example", "worker@example", "request", "queued request", "SECRET_QUEUED_BODY"),
             )
-            self.assertIsNotNone(claim_message(base, "lulu@kamac", request_path))
+            self.assertIsNotNone(claim_message(base, "worker@example", request_path))
 
-            result = run_cli(base, "pending", "--agent", "lulu")
+            result = run_cli(base, "pending", "--agent", "worker")
             output = load_json(result.stdout)
 
             self.assertEqual(output["count"], 1)
@@ -192,12 +192,12 @@ class ReceiptCLITest(unittest.TestCase):
             base = self._setup_mailbox(tmp)
             request_path = send_message(
                 base,
-                make_message("zhiwei@known-blocks1", "lulu@kamac", "request", "queued request", "SECRET_QUEUED_BODY"),
+                make_message("operator@example", "worker@example", "request", "queued request", "SECRET_QUEUED_BODY"),
             )
-            claimed = claim_message(base, "lulu@kamac", request_path)
+            claimed = claim_message(base, "worker@example", request_path)
             self.assertIsNotNone(claimed)
 
-            result = run_cli(base, "pending", "--agent", "lulu", "--include-processing")
+            result = run_cli(base, "pending", "--agent", "worker", "--include-processing")
             output = load_json(result.stdout)
 
             self.assertEqual(output["count"], 1)
@@ -212,12 +212,12 @@ class ReceiptCLITest(unittest.TestCase):
             base = self._setup_mailbox(tmp)
             request_path = send_message(
                 base,
-                make_message("zhiwei@known-blocks1", "lulu@kamac", "request", "queued command", "SECRET_QUEUED_BODY"),
+                make_message("operator@example", "worker@example", "request", "queued command", "SECRET_QUEUED_BODY"),
             )
-            claimed = claim_message(base, "lulu@kamac", request_path)
+            claimed = claim_message(base, "worker@example", request_path)
             self.assertIsNotNone(claimed)
 
-            result = run_cli(base, "queued", "--agent", "lulu")
+            result = run_cli(base, "queued", "--agent", "worker")
             output = load_json(result.stdout)
 
             self.assertEqual(output["count"], 1)
@@ -228,10 +228,10 @@ class ReceiptCLITest(unittest.TestCase):
     def test_malformed_processing_is_visible_as_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = self._setup_mailbox(tmp)
-            bad_path = processing_dir(base, "lulu@kamac") / "bad.json"
+            bad_path = processing_dir(base, "worker@example") / "bad.json"
             bad_path.write_text("{not valid json", encoding="utf-8")
 
-            result = run_cli(base, "queued", "--agent", "lulu")
+            result = run_cli(base, "queued", "--agent", "worker")
             output = load_json(result.stdout)
 
             self.assertEqual(output["count"], 1)
@@ -242,9 +242,9 @@ class ReceiptCLITest(unittest.TestCase):
     def test_recover_processing_can_finish_archivable_message_after_restart(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = self._setup_mailbox(tmp)
-            msg = make_message("zhiwei@known-blocks1", "lulu@kamac", "note", "restart", "body")
+            msg = make_message("operator@example", "worker@example", "note", "restart", "body")
             inbox_path = send_message(base, msg)
-            claimed = claim_message(base, "lulu@kamac", inbox_path)
+            claimed = claim_message(base, "worker@example", inbox_path)
             self.assertIsNotNone(claimed)
             self.assertTrue(claimed.exists())
 
@@ -258,9 +258,9 @@ class ReceiptCLITest(unittest.TestCase):
     def test_recover_processing_reports_queued_request_after_restart(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = self._setup_mailbox(tmp)
-            msg = make_message("zhiwei@known-blocks1", "lulu@kamac", "request", "restart request", "body")
+            msg = make_message("operator@example", "worker@example", "request", "restart request", "body")
             inbox_path = send_message(base, msg)
-            claimed = claim_message(base, "lulu@kamac", inbox_path)
+            claimed = claim_message(base, "worker@example", inbox_path)
             self.assertIsNotNone(claimed)
 
             output = self._receipt_once(base, "--recover-processing")

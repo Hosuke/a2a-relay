@@ -17,8 +17,8 @@ Create a mailbox with two agents:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox init \
-  --agent zhiwei@known-blocks1 \
-  --agent lulu@kamac
+  --agent operator@example \
+  --agent worker@example
 ```
 
 `init` creates the base directories, `agents.json`, and `contacts.json`. Agent
@@ -27,12 +27,12 @@ IDs are mapped to filesystem-safe directory names by replacing characters outsid
 
 ## Send A Request
 
-Send a request from `lulu@kamac` to `zhiwei@known-blocks1`:
+Send a request from `worker@example` to `operator@example`:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox send \
-  --from lulu@kamac \
-  --to zhiwei@known-blocks1 \
+  --from worker@example \
+  --to operator@example \
   --type request \
   --subject "hello" \
   --body "Please check this handoff." \
@@ -47,14 +47,14 @@ Show messages waiting in an agent inbox:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox pending \
-  --agent zhiwei@known-blocks1
+  --agent operator@example
 ```
 
 For operator triage, include messages already claimed into `processing/`:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox pending \
-  --agent zhiwei@known-blocks1 \
+  --agent operator@example \
   --include-processing
 ```
 
@@ -62,7 +62,7 @@ List only queued or claimed processing messages:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox queued \
-  --agent zhiwei@known-blocks1
+  --agent operator@example
 ```
 
 `pending`, `pending --include-processing`, and `queued` print metadata only:
@@ -80,7 +80,7 @@ python -m a2a_relay --base /root/agent-mailbox threads
 Useful operator filters:
 
 ```bash
-python -m a2a_relay --base /root/agent-mailbox threads --contact lulu
+python -m a2a_relay --base /root/agent-mailbox threads --contact worker
 python -m a2a_relay --base /root/agent-mailbox threads --failed
 python -m a2a_relay --base /root/agent-mailbox threads --needs-reply
 python -m a2a_relay --base /root/agent-mailbox threads --event-type sent
@@ -95,8 +95,8 @@ filters the row's counted events.
 For a single thread, show metadata-only events as JSON or Markdown:
 
 ```bash
-python -m a2a_relay --base /root/agent-mailbox timeline thread_lulu_zhiwei_hello
-python -m a2a_relay --base /root/agent-mailbox timeline thread_lulu_zhiwei_hello --markdown
+python -m a2a_relay --base /root/agent-mailbox timeline thread_worker_operator_hello
+python -m a2a_relay --base /root/agent-mailbox timeline thread_worker_operator_hello --markdown
 ```
 
 For a quick mailbox health check:
@@ -117,8 +117,8 @@ messages:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox poll \
-  --agent zhiwei@known-blocks1 \
-  --allow-from lulu@kamac \
+  --agent operator@example \
+  --allow-from worker@example \
   --ack
 ```
 
@@ -133,10 +133,10 @@ event log:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox reply \
-  --from zhiwei@known-blocks1 \
-  --to lulu@kamac \
-  --reply-to msg_20260508_163000_lulu_to_zhiwei \
-  --thread-id thread_lulu_zhiwei_hello \
+  --from operator@example \
+  --to worker@example \
+  --reply-to msg_20260508_163000_worker_to_operator \
+  --thread-id thread_worker_operator_hello \
   --body "Received. I will take a look."
 ```
 
@@ -145,8 +145,8 @@ If you have the original message file, `reply` can infer the recipient,
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox reply \
-  --from zhiwei@known-blocks1 \
-  --message-file /root/agent-mailbox/processing/zhiwei_known-blocks1/request.json \
+  --from operator@example \
+  --message-file /root/agent-mailbox/processing/operator_example/request.json \
   --body "Received. I will take a look."
 ```
 
@@ -156,8 +156,8 @@ For a long-running watcher:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox watch \
-  --agent zhiwei@known-blocks1 \
-  --allow-from lulu@kamac \
+  --agent operator@example \
+  --allow-from worker@example \
   --interval 10 \
   --ack
 ```
@@ -171,8 +171,8 @@ dispatch:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox receipt \
-  --agent lulu@kamac \
-  --allow-from zhiwei@known-blocks1 \
+  --agent worker@example \
+  --allow-from operator@example \
   --once \
   --json
 ```
@@ -191,11 +191,11 @@ agent-mailbox/
 ├── contacts.json
 ├── dispatcher.json          # optional
 ├── inbox/
-│   ├── zhiwei_known-blocks1/
-│   └── lulu_kamac/
+│   ├── operator_example/
+│   └── worker_example/
 ├── processing/
-│   ├── zhiwei_known-blocks1/
-│   └── lulu_kamac/
+│   ├── operator_example/
+│   └── worker_example/
 ├── archive/
 │   ├── processed/
 │   └── failed/

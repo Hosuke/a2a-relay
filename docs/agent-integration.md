@@ -42,11 +42,11 @@ from a2a_relay.core import (
 )
 
 base = Path("/root/agent-mailbox")
-init_mailbox(base, ["lulu@kamac", "zhiwei@known-blocks1"])
+init_mailbox(base, ["worker@example", "operator@example"])
 
 request = make_message(
-    "lulu@kamac",
-    "zhiwei@known-blocks1",
+    "worker@example",
+    "operator@example",
     "request",
     "hello",
     "Please review this handoff.",
@@ -54,15 +54,15 @@ request = make_message(
 )
 send_message(base, request)
 
-for inbox_path in list_messages(base, "zhiwei@known-blocks1"):
-    claimed = claim_message(base, "zhiwei@known-blocks1", inbox_path)
+for inbox_path in list_messages(base, "operator@example"):
+    claimed = claim_message(base, "operator@example", inbox_path)
     if claimed is None:
         continue
     msg = read_message(claimed)
-    validate_message(msg, config=RelayConfig(allow_from={"lulu@kamac"}))
+    validate_message(msg, config=RelayConfig(allow_from={"worker@example"}))
 
     reply = make_message(
-        "zhiwei@known-blocks1",
+        "operator@example",
         msg["from"],
         "reply",
         f"Re: {msg['subject']}",
@@ -71,7 +71,7 @@ for inbox_path in list_messages(base, "zhiwei@known-blocks1"):
         thread_id=msg.get("thread_id"),
     )
     send_message(base, reply)
-    mark_seen(base, msg, actor="zhiwei@known-blocks1")
+    mark_seen(base, msg, actor="operator@example")
     archive_message(base, claimed, ok=True, message_id=msg["id"])
 ```
 
@@ -81,16 +81,16 @@ If an agent is easier to operate through subprocesses, use the CLI:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox pending \
-  --agent zhiwei@known-blocks1
+  --agent operator@example
 
 python -m a2a_relay --base /root/agent-mailbox poll \
-  --agent zhiwei@known-blocks1 \
-  --allow-from lulu@kamac \
+  --agent operator@example \
+  --allow-from worker@example \
   --ack
 
 python -m a2a_relay --base /root/agent-mailbox reply \
-  --from zhiwei@known-blocks1 \
-  --to lulu@kamac \
+  --from operator@example \
+  --to worker@example \
   --reply-to msg_... \
   --thread-id thread_... \
   --body "Received."
@@ -100,10 +100,10 @@ For operator queues, use:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox queued \
-  --agent zhiwei@known-blocks1
+  --agent operator@example
 
 python -m a2a_relay --base /root/agent-mailbox pending \
-  --agent zhiwei@known-blocks1 \
+  --agent operator@example \
   --include-processing
 ```
 
@@ -123,15 +123,15 @@ conservative because archived event records do not include `needs_reply`.
 
 ## Task Delegation CLI
 
-For agent handoffs to a local worker such as Lancha Mac mini, prefer `task send`
-over free-form `send`. It always creates a `type=request`, sets
-`needs_reply=true`, and renders a policy-bounded Markdown task envelope. The
-message requests capabilities; it does not carry shell commands.
+For agent handoffs to a local worker agent, prefer `task send` over free-form
+`send`. It always creates a `type=request`, sets `needs_reply=true`, and renders
+a policy-bounded Markdown task envelope. The message requests capabilities; it
+does not carry shell commands.
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox task send \
-  --from zhiwei@known-blocks1 \
-  --to lancha@macmini \
+  --from operator@example \
+  --to worker@example \
   --title "Check local database reachability" \
   --context "Known symptom: public host times out" \
   --constraint "Read-only checks only" \
@@ -164,8 +164,8 @@ The dispatcher is for policy-gated local auto-replies. Configure
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox dispatch \
-  --agent zhiwei@known-blocks1 \
-  --allow-from lulu@kamac \
+  --agent operator@example \
+  --allow-from worker@example \
   --action auto-reply \
   --ack
 ```
@@ -174,8 +174,8 @@ Or run continuously:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox watch \
-  --agent zhiwei@known-blocks1 \
-  --allow-from lulu@kamac \
+  --agent operator@example \
+  --allow-from worker@example \
   --dispatch-action auto-reply \
   --interval 10 \
   --ack
@@ -185,7 +185,7 @@ The configured action receives stdin shaped like:
 
 ```text
 <a2a_message>
-sender: lulu@kamac
+sender: worker@example
 subject: hello
 body: Please review this handoff.
 </a2a_message>
@@ -202,7 +202,7 @@ Use `examples/systemd/a2a-watch@.service` as a starting point:
 ```bash
 sudo cp examples/systemd/a2a-watch@.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now 'a2a-watch@zhiwei@known-blocks1.service'
+sudo systemctl enable --now 'a2a-watch@operator@example.service'
 ```
 
 Override `A2A_BASE`, `A2A_ALLOW_FROM`, `WorkingDirectory`, and hardening options
@@ -212,10 +212,10 @@ unit instance name, create a wrapper unit or a drop-in with an explicit
 
 ## End-To-End Scenario
 
-1. Operator initializes a mailbox with `lulu@kamac` and `zhiwei@known-blocks1`.
+1. Operator initializes a mailbox with `worker@example` and `operator@example`.
 2. Operator adds any extra private contacts and aliases.
-3. Lulu sends a `request` with `needs_reply=true`.
-4. Zhiwei's watcher validates sender policy with `--allow-from lulu@kamac`.
+3. The worker sends a `request` with `needs_reply=true`.
+4. Operator's watcher validates sender policy with `--allow-from worker@example`.
 5. If dispatch is configured and the request passes policy, a local action runs
    with the message as stdin and sends stdout as a `reply`.
 6. If the request requires human approval, it remains in `processing/` and is

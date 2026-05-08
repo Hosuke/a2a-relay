@@ -1,6 +1,6 @@
 # A2A Relay Upgrade Plan
 
-> **For Hermes:** Use cursor-agent-workflow for design review first, then implement in small PR-sized increments.
+> **For maintainers:** Use external design-review workflow for design review first, then implement in small PR-sized increments.
 
 **Goal:** Evolve A2A Relay from a working filesystem mailbox into a durable, auditable, multi-agent coordination layer that supports near-realtime replies, safe automation, and future webhook/WebSocket transports.
 
@@ -17,8 +17,8 @@ The current repository already has:
 - `a2a_relay.core`: message creation, filesystem inbox, archive helpers.
 - `a2a_relay.cli`: `init`, `send`, `poll`, `watch`.
 - `docs/protocol.md`: initial message schema.
-- Working deployment on `lulu-jump:/root/agent-mailbox`.
-- Zhiwei-side 10-second watcher that ACKs lulu messages.
+- Working deployment on `mailbox-host.example:/root/agent-mailbox`.
+- Operator-side 10-second watcher that ACKs worker messages.
 
 The current bottleneck is not message delivery; it is **reply orchestration**. Messages are ACKed but not automatically routed into an agent run that can produce a real response.
 
@@ -142,8 +142,8 @@ Tasks:
 
 Acceptance:
 
-- lulu can ask “IMA 旧条目怎么删?” and zhiwei can auto-generate a bounded reply.
-- If dispatcher fails, lulu receives a failure status with a short reason.
+- worker can ask an allowed operational question and operator can auto-generate a bounded reply.
+- If dispatcher fails, worker receives a failure status with a short reason.
 - No message can force arbitrary shell execution outside configured command.
 
 ### v0.4 — Identity, signing, and replay protection
@@ -156,10 +156,10 @@ Tasks:
 
 ```json
 {
-  "id": "lulu@kamac",
-  "display_name": "lulu",
+  "id": "worker@example",
+  "display_name": "worker",
   "public_key": null,
-  "hmac_key_ref": "env:A2A_LULU_HMAC_KEY",
+  "hmac_key_ref": "env:A2A_WORKER_HMAC_KEY",
   "allowed_types": ["note", "request", "reply", "status"],
   "max_urgency": "high"
 }
@@ -212,17 +212,17 @@ Tasks:
 1. Static/read-only timeline UI over JSONL events.
 2. Thread view by `thread_id`.
 3. Filters: agent, urgency, needs_reply, failed.
-4. Link out to zhiwei.stpt.top / Agent Memory Workbench.
+4. Link out to an operator dashboard.
 
 Acceptance:
 
-- 舸洋 can inspect zhiwei ↔ lulu coordination without reading raw JSON manually.
+- The operator can inspect operator ↔ worker coordination without reading raw JSON manually.
 
 ---
 
 ## Immediate Next Step
 
-Cursor-agent review is now complete. Implement v0.2 in one small PR, with this scope:
+External design review is now complete. Implement v0.2 in one small PR, with this scope:
 
 - `reply` command
 - validator and body size limit
@@ -277,7 +277,7 @@ Recommended deployment:
 
 ## Risks
 
-1. **Auto-reply loops**: lulu asks zhiwei, zhiwei asks lulu, infinite loop.
+1. **Auto-reply loops**: worker asks operator, operator asks worker, infinite loop.
    - Mitigation: `max_hops`, `reply_to`, loop detection, no auto-dispatch on `status`.
 
 2. **Secret leakage**: agents paste credentials into messages.
@@ -294,12 +294,12 @@ Recommended deployment:
 
 ---
 
-## Cursor-Agent Review Prompt
+## External Review Prompt
 
 ```text
-You are reviewing Hosuke/a2a-relay. Read README.md, docs/protocol.md, a2a_relay/core.py, a2a_relay/cli.py, and docs/design/2026-05-08-a2a-relay-upgrade-plan.md.
+You are reviewing this repository. Read README.md, docs/protocol.md, a2a_relay/core.py, a2a_relay/cli.py, and docs/design/2026-05-08-a2a-relay-upgrade-plan.md.
 
-Goal: critique and improve the upgrade plan for an agent-to-agent relay used by zhiwei@known-blocks1 and lulu@kamac. Requirements: least privilege, auditable messages, near-realtime replies, no arbitrary remote execution, future webhook/WebSocket path.
+Goal: critique and improve the upgrade plan for an agent-to-agent relay used by operator@example and worker@example. Requirements: least privilege, auditable messages, near-realtime replies, no arbitrary remote execution, future webhook/WebSocket path.
 
 Return: top design risks, missing protocol fields, v0.2 implementation scope, test plan, and any changes you recommend before coding. Do not modify files. Do not commit.
 ```
