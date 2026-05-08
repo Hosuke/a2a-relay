@@ -108,6 +108,8 @@ def make_message(sender: str, recipient: str, typ: str, subject: str, body: str,
         raise ValueError(f"unknown message type: {typ}")
     if urgency not in URGENCIES:
         raise ValueError(f"unknown urgency: {urgency}")
+    if sender == recipient:
+        raise ValueError("self messages are not allowed")
     mid = message_id(sender, recipient)
     return A2AMessage(
         version="a2a.v1",

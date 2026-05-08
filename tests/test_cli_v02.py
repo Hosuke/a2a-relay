@@ -76,6 +76,27 @@ class A2ARelayV02CLITest(unittest.TestCase):
             self.assertIn('"event_type": "acked"', events)
             self.assertIn('"event_type": "replied"', events)
 
+    def test_self_message_send_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "mailbox"
+            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
+
+            result = run_cli(
+                base,
+                "send",
+                "--from", "zhiwei@known-blocks1",
+                "--to", "zhiwei@known-blocks1",
+                "--type", "status",
+                "--subject", "self loop",
+                "--body", "do not create this",
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("self messages are not allowed", result.stderr)
+            inbox = base / "inbox" / "zhiwei_known-blocks1"
+            self.assertEqual(list(inbox.glob("*.json")), [])
+
     def test_duplicate_id_is_archived_without_second_ack(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
