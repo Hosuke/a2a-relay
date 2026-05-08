@@ -5,7 +5,7 @@ description = "Small, boring, auditable agent-to-agent relay protocol and filesy
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
-authors = [{name = "Zhiwei", email = "zhiwei@siwen.ink"}]
+authors = [{name = "A2A Relay maintainers", email = "maintainers@example.com"}]
 keywords = ["agent", "a2a", "relay", "mailbox", "automation"]
 classifiers = [
   "Development Status :: 3 - Alpha",

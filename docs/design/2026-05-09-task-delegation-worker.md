@@ -1,8 +1,8 @@
 # Task Delegation Worker Path
 
 A2A Relay's next useful level is not direct SSH. It is a structured task handoff:
-Zhiwei sends a bounded request, the local machine's worker decides what it may do,
-and the worker replies with evidence.
+an operator agent sends a bounded request, the local machine's worker decides
+what it may do, and the worker replies with evidence.
 
 ## Goals
 
@@ -10,7 +10,7 @@ and the worker replies with evidence.
 - Keep message bodies as task descriptions, not commands.
 - Preserve auditability through normal `sent`, `received`, `queued`, `reply`, and
   timeline events.
-- Make the Lancha Mac mini path possible: Zhiwei can send a task; Lancha's local
+- Make local-worker handoffs possible: an operator can send a task; the receiving
   worker can inspect its own files, services, and databases under local policy.
 
 ## Non-goals
@@ -27,8 +27,8 @@ Use:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox task send \
-  --from zhiwei@known-blocks1 \
-  --to lancha@macmini \
+  --from operator@example \
+  --to worker@example \
   --title "Check local database reachability" \
   --context "Known symptom: public host times out" \
   --constraint "Read-only checks only" \
@@ -71,15 +71,15 @@ Workers should answer with:
 5. recommended next action
 6. whether human approval is needed
 
-## Lancha Mac mini rollout sketch
+## Private worker rollout sketch
 
-1. Add `lancha@macmini` as a contact in the shared mailbox.
+1. Add the worker agent as a contact in the shared mailbox.
 2. Start with Level 1 receipt watcher: requests queue, no Hermes execution:
 
    ```bash
    python -m a2a_relay --base /root/agent-mailbox receipt \
-     --agent lancha@macmini \
-     --allow-from zhiwei@known-blocks1 \
+     --agent worker@example \
+     --allow-from operator@example \
      --once \
      --json
    ```
@@ -87,7 +87,7 @@ Workers should answer with:
    For a long-running watcher, drop `--once`; do not use `dispatch` until the
    queue-only path is verified.
 3. Verify `task send -> receipt_queued_for_human event -> queued -> timeline` from
-   Zhiwei to Lancha. `queued` is the operator view over `processing/<agent>/`;
+   operator to worker. `queued` is the operator view over `processing/<agent>/`;
    the timeline event emitted by the receipt watcher is
    `receipt_queued_for_human`.
 4. Add a restricted local worker action that reads the queued request and runs

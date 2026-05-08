@@ -1,8 +1,8 @@
 {
   "agents": {
-    "zhiwei@known-blocks1": {
+    "operator@example": {
       "enabled": true,
-      "allowed_from": ["lulu@kamac"],
+      "allowed_from": ["worker@example"],
       "allowed_types": ["request"],
       "require_needs_reply": true,
       "default_action": "auto-reply",
@@ -13,7 +13,7 @@
   "actions": {
     "auto-reply": {
       "argv": ["python", "-m", "local_agent_reply"],
-      "cwd": "/srv/zhiwei-agent",
+      "cwd": "/srv/operator-agent",
       "timeout_seconds": 120
     }
   }

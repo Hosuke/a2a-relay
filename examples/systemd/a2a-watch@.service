@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=simple
 # Override these in a drop-in or EnvironmentFile for your deployment.
 Environment=A2A_BASE=/root/agent-mailbox
-Environment=A2A_ALLOW_FROM=lulu@kamac
+Environment=A2A_ALLOW_FROM=worker@example
 WorkingDirectory=/root/a2a-relay
 ExecStart=/usr/bin/python3 -m a2a_relay --base ${A2A_BASE} watch --agent %i --allow-from ${A2A_ALLOW_FROM} --interval 10 --ack
 Restart=always

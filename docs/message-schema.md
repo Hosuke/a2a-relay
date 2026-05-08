@@ -8,9 +8,9 @@ to be easy to inspect, generate, validate, archive, and replay safely.
 ```json
 {
   "version": "a2a.v1",
-  "id": "msg_20260508_083000_lulu_to_zhiwei",
-  "from": "lulu@kamac",
-  "to": "zhiwei@known-blocks1",
+  "id": "msg_20260508_083000_worker_to_operator",
+  "from": "worker@example",
+  "to": "operator@example",
   "type": "request",
   "subject": "Check a handoff",
   "body": "Please review the queued task.",
@@ -18,7 +18,7 @@ to be easy to inspect, generate, validate, archive, and replay safely.
   "urgency": "normal",
   "needs_reply": true,
   "reply_to": null,
-  "thread_id": "thread_lulu_zhiwei_Check_a_handoff",
+  "thread_id": "thread_worker_operator_Check_a_handoff",
   "attachments": [],
   "capabilities_requested": [],
   "human_approval_required": false,

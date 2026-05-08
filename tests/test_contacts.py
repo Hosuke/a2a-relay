@@ -29,35 +29,35 @@ class A2ARelayContactsCLITest(unittest.TestCase):
     def test_init_creates_contacts_and_alias_send(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
-            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
+            run_cli(base, "init", "--agent", "operator@example", "--agent", "worker@example")
             run_cli(
                 base,
                 "contacts", "add",
-                "--id", "kames@kamac",
-                "--display-name", "kames",
-                "--alias", "kames",
+                "--id", "reviewer@example",
+                "--display-name", "reviewer",
+                "--alias", "reviewer",
                 "--alias", "kam",
-                "--notes", "private contact on kamac",
+                "--notes", "private contact on worker-host",
             )
             contacts = load_json(run_cli(base, "contacts", "list").stdout)
             self.assertEqual(contacts["count"], 3)
-            self.assertTrue(any(c["id"] == "kames@kamac" and "kames" in c["aliases"] for c in contacts["contacts"]))
+            self.assertTrue(any(c["id"] == "reviewer@example" and "reviewer" in c["aliases"] for c in contacts["contacts"]))
 
             shown = load_json(run_cli(base, "contacts", "show", "kam").stdout)
-            self.assertEqual(shown["id"], "kames@kamac")
+            self.assertEqual(shown["id"], "reviewer@example")
 
-            sent = run_cli(base, "send", "--from", "lulu@kamac", "--to", "kames", "--subject", "hi", "--body", "hello")
+            sent = run_cli(base, "send", "--from", "worker@example", "--to", "reviewer", "--subject", "hi", "--body", "hello")
             path = Path(sent.stdout.strip())
             self.assertTrue(path.exists())
             payload = json.loads(path.read_text(encoding="utf-8"))
-            self.assertEqual(payload["to"], "kames@kamac")
+            self.assertEqual(payload["to"], "reviewer@example")
 
     def test_alias_conflict_and_unknown_alias_fail_safely(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
-            run_cli(base, "init", "--agent", "zhiwei@known-blocks1")
-            run_cli(base, "contacts", "add", "--id", "lulu@kamac", "--alias", "lulu")
-            duplicate = run_cli(base, "contacts", "add", "--id", "kames@kamac", "--alias", "lulu", check=False)
+            run_cli(base, "init", "--agent", "operator@example")
+            run_cli(base, "contacts", "add", "--id", "worker@example", "--alias", "worker")
+            duplicate = run_cli(base, "contacts", "add", "--id", "reviewer@example", "--alias", "worker", check=False)
             self.assertNotEqual(duplicate.returncode, 0)
             self.assertIn("alias already used", duplicate.stderr)
 
@@ -68,12 +68,12 @@ class A2ARelayContactsCLITest(unittest.TestCase):
     def test_remove_contact(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
-            run_cli(base, "init", "--agent", "zhiwei@known-blocks1")
-            run_cli(base, "contacts", "add", "--id", "lulu@kamac", "--alias", "lulu")
-            removed = load_json(run_cli(base, "contacts", "remove", "lulu").stdout)
-            self.assertEqual(removed["removed"], "lulu@kamac")
+            run_cli(base, "init", "--agent", "operator@example")
+            run_cli(base, "contacts", "add", "--id", "worker@example", "--alias", "worker")
+            removed = load_json(run_cli(base, "contacts", "remove", "worker").stdout)
+            self.assertEqual(removed["removed"], "worker@example")
             contacts = load_json(run_cli(base, "contacts", "list").stdout)
-            self.assertFalse(any(c["id"] == "lulu@kamac" for c in contacts["contacts"]))
+            self.assertFalse(any(c["id"] == "worker@example" for c in contacts["contacts"]))
 
     def test_ambiguous_alias_fails_safely(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -145,10 +145,10 @@ class A2ARelayContactsCLITest(unittest.TestCase):
     def test_threads_can_filter_by_contact_alias(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
-            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac", "--agent", "kames@kamac")
-            run_cli(base, "contacts", "add", "--id", "observer@known-blocks1", "--alias", "obs")
-            run_cli(base, "send", "--from", "lulu@kamac", "--to", "zhiwei@known-blocks1", "--subject", "lulu", "--body", "hello")
-            run_cli(base, "send", "--from", "observer@known-blocks1", "--to", "zhiwei@known-blocks1", "--subject", "obs", "--body", "hello")
+            run_cli(base, "init", "--agent", "operator@example", "--agent", "worker@example", "--agent", "reviewer@example")
+            run_cli(base, "contacts", "add", "--id", "observer@example", "--alias", "obs")
+            run_cli(base, "send", "--from", "worker@example", "--to", "operator@example", "--subject", "worker", "--body", "hello")
+            run_cli(base, "send", "--from", "observer@example", "--to", "operator@example", "--subject", "obs", "--body", "hello")
             all_threads = load_json(run_cli(base, "threads").stdout)
             filtered = load_json(run_cli(base, "threads", "--contact", "obs").stdout)
             self.assertGreaterEqual(all_threads["count"], 2)

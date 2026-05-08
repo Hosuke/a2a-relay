@@ -92,12 +92,12 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp) / "agent-mailbox"
 
-        init_mailbox(base, ["lulu@kamac", "zhiwei@known-blocks1"])
+        init_mailbox(base, ["worker@example", "operator@example"])
         add_contact(base, Contact(id="operator@localhost", aliases=["operator"]))
 
         request = make_message(
-            "lulu@kamac",
-            "zhiwei@known-blocks1",
+            "worker@example",
+            "operator@example",
             "request",
             "python api smoke test",
             "Please confirm you can read and reply.",
@@ -108,10 +108,10 @@ def main() -> None:
 
         handled = handle_one_message(
             base,
-            "zhiwei@known-blocks1",
-            allow_from={"lulu@kamac"},
+            "operator@example",
+            allow_from={"worker@example"},
         )
-        reply = claim_reply(base, "lulu@kamac", allow_from={"zhiwei@known-blocks1"})
+        reply = claim_reply(base, "worker@example", allow_from={"operator@example"})
 
         print(json.dumps({
             "mailbox": str(base),

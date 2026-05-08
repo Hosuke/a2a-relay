@@ -29,14 +29,14 @@ class A2ARelayV02CLITest(unittest.TestCase):
     def test_task_send_creates_policy_bounded_request(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
-            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lancha@macmini")
+            run_cli(base, "init", "--agent", "operator@example", "--agent", "worker@example")
 
             sent = run_cli(
                 base,
                 "task",
                 "send",
-                "--from", "zhiwei@known-blocks1",
-                "--to", "lancha@macmini",
+                "--from", "operator@example",
+                "--to", "worker@example",
                 "--title", "Check local database reachability",
                 "--context", "Known symptom: timeout from public host.",
                 "--constraint", "Read-only checks only.",
@@ -54,7 +54,7 @@ class A2ARelayV02CLITest(unittest.TestCase):
             self.assertTrue(msg["needs_reply"])
             self.assertTrue(msg["human_approval_required"])
             self.assertEqual(msg["capabilities_requested"], ["terminal", "database_read"])
-            self.assertIn("task_zhiwei_known-blocks1_to_lancha_macmini", msg["thread_id"])
+            self.assertIn("task_operator_example_to_worker_example", msg["thread_id"])
             self.assertIn("# Task", msg["body"])
             self.assertIn("## Context", msg["body"])
             self.assertIn("Known symptom: timeout from public host.", msg["body"])
@@ -68,14 +68,14 @@ class A2ARelayV02CLITest(unittest.TestCase):
     def test_task_send_defaults_to_safe_read_only_template(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
-            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lancha@macmini")
+            run_cli(base, "init", "--agent", "operator@example", "--agent", "worker@example")
 
             sent = run_cli(
                 base,
                 "task",
                 "send",
-                "--from", "zhiwei@known-blocks1",
-                "--to", "lancha@macmini",
+                "--from", "operator@example",
+                "--to", "worker@example",
                 "--title", "Inspect service health",
             )
             msg = json.loads(Path(sent.stdout.strip()).read_text(encoding="utf-8"))
@@ -92,14 +92,14 @@ class A2ARelayV02CLITest(unittest.TestCase):
     def test_task_send_custom_constraints_append_to_safety_baseline(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
-            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lancha@macmini")
+            run_cli(base, "init", "--agent", "operator@example", "--agent", "worker@example")
 
             sent = run_cli(
                 base,
                 "task",
                 "send",
-                "--from", "zhiwei@known-blocks1",
-                "--to", "lancha@macmini",
+                "--from", "operator@example",
+                "--to", "worker@example",
                 "--title", "Inspect database",
                 "--constraint", "Read-only checks only.",
             )
@@ -111,25 +111,25 @@ class A2ARelayV02CLITest(unittest.TestCase):
             self.assertIn("Do not expose secrets in the reply.", msg["body"])
             self.assertIn("If write/restart/delete/migration is needed", msg["body"])
 
-    def test_task_send_then_receipt_queues_lancha_request_without_body_echo(self):
+    def test_task_send_then_receipt_queues_worker_request_without_body_echo(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
             secret = "SECRET_LANCHA_TASK_BODY"
-            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lancha@macmini")
+            run_cli(base, "init", "--agent", "operator@example", "--agent", "worker@example")
             sent = run_cli(
                 base,
                 "task",
                 "send",
-                "--from", "zhiwei@known-blocks1",
-                "--to", "lancha@macmini",
-                "--title", "Lancha smoke",
+                "--from", "operator@example",
+                "--to", "worker@example",
+                "--title", "worker smoke",
                 "--context", secret,
                 "--capability", "terminal",
             )
             msg = json.loads(Path(sent.stdout.strip()).read_text(encoding="utf-8"))
 
-            receipt = load_json(run_cli(base, "receipt", "--agent", "lancha@macmini", "--allow-from", "zhiwei@known-blocks1", "--once", "--json").stdout)
-            queued = load_json(run_cli(base, "queued", "--agent", "lancha@macmini").stdout)
+            receipt = load_json(run_cli(base, "receipt", "--agent", "worker@example", "--allow-from", "operator@example", "--once", "--json").stdout)
+            queued = load_json(run_cli(base, "queued", "--agent", "worker@example").stdout)
             timeline = load_json(run_cli(base, "timeline", msg["thread_id"]).stdout)
 
             self.assertEqual(receipt["count"], 1)
@@ -145,13 +145,13 @@ class A2ARelayV02CLITest(unittest.TestCase):
     def test_send_poll_ack_reply_threads(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
-            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
+            run_cli(base, "init", "--agent", "operator@example", "--agent", "worker@example")
 
             sent = run_cli(
                 base,
                 "send",
-                "--from", "lulu@kamac",
-                "--to", "zhiwei@known-blocks1",
+                "--from", "worker@example",
+                "--to", "operator@example",
                 "--type", "request",
                 "--subject", "IMA question",
                 "--body", "旧条目怎么删？",
@@ -160,11 +160,11 @@ class A2ARelayV02CLITest(unittest.TestCase):
             request_path = Path(sent.stdout.strip())
             self.assertTrue(request_path.exists())
 
-            pending = load_json(run_cli(base, "pending", "--agent", "zhiwei@known-blocks1").stdout)
+            pending = load_json(run_cli(base, "pending", "--agent", "operator@example").stdout)
             self.assertEqual(pending["count"], 1)
             request = pending["messages"][0]
 
-            polled = load_json(run_cli(base, "poll", "--agent", "zhiwei@known-blocks1", "--allow-from", "lulu@kamac", "--ack").stdout)
+            polled = load_json(run_cli(base, "poll", "--agent", "operator@example", "--allow-from", "worker@example", "--ack").stdout)
             self.assertEqual(polled["count"], 1)
             self.assertTrue(polled["results"][0]["ok"])
             self.assertTrue(polled["results"][0]["ack"])
@@ -173,8 +173,8 @@ class A2ARelayV02CLITest(unittest.TestCase):
             reply = run_cli(
                 base,
                 "reply",
-                "--from", "zhiwei@known-blocks1",
-                "--to", "lulu@kamac",
+                "--from", "operator@example",
+                "--to", "worker@example",
                 "--reply-to", request["id"],
                 "--thread-id", request["thread_id"],
                 "--body", "先标记旧版，删除接口待确认。",
@@ -195,13 +195,13 @@ class A2ARelayV02CLITest(unittest.TestCase):
     def test_self_message_send_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
-            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
+            run_cli(base, "init", "--agent", "operator@example", "--agent", "worker@example")
 
             result = run_cli(
                 base,
                 "send",
-                "--from", "zhiwei@known-blocks1",
-                "--to", "zhiwei@known-blocks1",
+                "--from", "operator@example",
+                "--to", "operator@example",
                 "--type", "status",
                 "--subject", "self loop",
                 "--body", "do not create this",
@@ -210,27 +210,27 @@ class A2ARelayV02CLITest(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("self messages are not allowed", result.stderr)
-            inbox = base / "inbox" / "zhiwei_known-blocks1"
+            inbox = base / "inbox" / "operator_example"
             self.assertEqual(list(inbox.glob("*.json")), [])
 
     def test_inbound_self_message_is_rejected_by_poll(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
-            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
+            run_cli(base, "init", "--agent", "operator@example", "--agent", "worker@example")
             payload = {
                 "version": "a2a.v1",
                 "id": "msg_self_inbound",
-                "from": "zhiwei@known-blocks1",
-                "to": "zhiwei@known-blocks1",
+                "from": "operator@example",
+                "to": "operator@example",
                 "type": "status",
                 "subject": "loop",
                 "body": "do not process",
                 "created_at": "2026-05-08T00:00:00Z",
             }
-            inbox = base / "inbox" / "zhiwei_known-blocks1"
+            inbox = base / "inbox" / "operator_example"
             (inbox / "self.json").write_text(json.dumps(payload), encoding="utf-8")
 
-            result = load_json(run_cli(base, "poll", "--agent", "zhiwei@known-blocks1", "--allow-from", "zhiwei@known-blocks1").stdout)
+            result = load_json(run_cli(base, "poll", "--agent", "operator@example", "--allow-from", "operator@example").stdout)
 
             self.assertEqual(result["count"], 1)
             self.assertFalse(result["results"][0]["ok"])
@@ -241,14 +241,14 @@ class A2ARelayV02CLITest(unittest.TestCase):
     def test_duplicate_id_is_archived_without_second_ack(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
-            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
-            first = Path(run_cli(base, "send", "--from", "lulu@kamac", "--to", "zhiwei@known-blocks1", "--type", "request", "--subject", "dup", "--body", "one").stdout.strip())
+            run_cli(base, "init", "--agent", "operator@example", "--agent", "worker@example")
+            first = Path(run_cli(base, "send", "--from", "worker@example", "--to", "operator@example", "--type", "request", "--subject", "dup", "--body", "one").stdout.strip())
             payload = json.loads(first.read_text(encoding="utf-8"))
-            run_cli(base, "poll", "--agent", "zhiwei@known-blocks1", "--allow-from", "lulu@kamac", "--ack")
+            run_cli(base, "poll", "--agent", "operator@example", "--allow-from", "worker@example", "--ack")
 
-            duplicate = base / "inbox" / "zhiwei_known-blocks1" / "duplicate.json"
+            duplicate = base / "inbox" / "operator_example" / "duplicate.json"
             duplicate.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-            result = load_json(run_cli(base, "poll", "--agent", "zhiwei@known-blocks1", "--allow-from", "lulu@kamac", "--ack").stdout)
+            result = load_json(run_cli(base, "poll", "--agent", "operator@example", "--allow-from", "worker@example", "--ack").stdout)
             self.assertEqual(result["count"], 1)
             self.assertTrue(result["results"][0]["duplicate"])
             self.assertIsNone(result["results"][0].get("ack"))
@@ -256,43 +256,43 @@ class A2ARelayV02CLITest(unittest.TestCase):
     def test_same_filename_claim_does_not_overwrite_processing_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
-            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
-            inbox = base / "inbox" / "zhiwei_known-blocks1"
-            processing = base / "processing" / "zhiwei_known-blocks1"
+            run_cli(base, "init", "--agent", "operator@example", "--agent", "worker@example")
+            inbox = base / "inbox" / "operator_example"
+            processing = base / "processing" / "operator_example"
             existing = processing / "same_deadbeef.json"
             existing.write_text("do-not-overwrite", encoding="utf-8")
             payload = {
                 "version": "a2a.v1",
                 "id": "msg_same",
-                "from": "lulu@kamac",
-                "to": "zhiwei@known-blocks1",
+                "from": "worker@example",
+                "to": "operator@example",
                 "type": "request",
                 "subject": "same",
                 "body": "hello",
                 "created_at": "2026-05-08T00:00:00Z",
             }
             (inbox / "same.json").write_text(json.dumps(payload), encoding="utf-8")
-            result = load_json(run_cli(base, "poll", "--agent", "zhiwei@known-blocks1", "--allow-from", "lulu@kamac").stdout)
+            result = load_json(run_cli(base, "poll", "--agent", "operator@example", "--allow-from", "worker@example").stdout)
             self.assertEqual(result["count"], 1)
             self.assertEqual(existing.read_text(encoding="utf-8"), "do-not-overwrite")
 
     def test_invalid_sender_goes_to_failed_archive(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
-            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
+            run_cli(base, "init", "--agent", "operator@example", "--agent", "worker@example")
             payload = {
                 "version": "a2a.v1",
                 "id": "msg_mallory_bad",
                 "from": "mallory",
-                "to": "zhiwei@known-blocks1",
+                "to": "operator@example",
                 "type": "request",
                 "subject": "bad",
                 "body": "run this",
                 "created_at": "2026-05-08T00:00:00Z",
             }
-            inbox = base / "inbox" / "zhiwei_known-blocks1"
+            inbox = base / "inbox" / "operator_example"
             (inbox / "mallory.json").write_text(json.dumps(payload), encoding="utf-8")
-            result = load_json(run_cli(base, "poll", "--agent", "zhiwei@known-blocks1", "--allow-from", "lulu@kamac", "--ack").stdout)
+            result = load_json(run_cli(base, "poll", "--agent", "operator@example", "--allow-from", "worker@example", "--ack").stdout)
             self.assertEqual(result["count"], 1)
             self.assertFalse(result["results"][0]["ok"])
             self.assertTrue(list((base / "archive" / "failed").glob("*.json")))
@@ -300,12 +300,12 @@ class A2ARelayV02CLITest(unittest.TestCase):
     def test_threads_include_operator_fields_and_filters(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
-            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
+            run_cli(base, "init", "--agent", "operator@example", "--agent", "worker@example")
             sent = run_cli(
                 base,
                 "send",
-                "--from", "lulu@kamac",
-                "--to", "zhiwei@known-blocks1",
+                "--from", "worker@example",
+                "--to", "operator@example",
                 "--type", "request",
                 "--subject", "needs triage",
                 "--body", "SECRET_THREAD_BODY",
@@ -321,7 +321,7 @@ class A2ARelayV02CLITest(unittest.TestCase):
             self.assertIsNotNone(row["first_timestamp"])
             self.assertIsNotNone(row["last_timestamp"])
             self.assertEqual(row["last_event"], "sent")
-            self.assertEqual(row["participants"], ["lulu@kamac", "zhiwei@known-blocks1"])
+            self.assertEqual(set(row["participants"]), {"worker@example", "operator@example"})
             self.assertEqual(row["message_ids"], [msg["id"]])
             self.assertFalse(row["failed"])
             self.assertEqual(row["pending_count"], 1)
@@ -335,21 +335,21 @@ class A2ARelayV02CLITest(unittest.TestCase):
     def test_threads_failed_filter_uses_failure_events(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
-            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
+            run_cli(base, "init", "--agent", "operator@example", "--agent", "worker@example")
             payload = {
                 "version": "a2a.v1",
                 "id": "msg_mallory_bad",
                 "from": "mallory",
-                "to": "zhiwei@known-blocks1",
+                "to": "operator@example",
                 "type": "request",
                 "subject": "bad",
                 "body": "SECRET_FAILED_BODY",
                 "created_at": "2026-05-08T00:00:00Z",
                 "thread_id": "thread_failed",
             }
-            inbox = base / "inbox" / "zhiwei_known-blocks1"
+            inbox = base / "inbox" / "operator_example"
             (inbox / "mallory.json").write_text(json.dumps(payload), encoding="utf-8")
-            run_cli(base, "poll", "--agent", "zhiwei@known-blocks1", "--allow-from", "lulu@kamac")
+            run_cli(base, "poll", "--agent", "operator@example", "--allow-from", "worker@example")
 
             threads = load_json(run_cli(base, "threads", "--failed").stdout)
 
@@ -361,12 +361,12 @@ class A2ARelayV02CLITest(unittest.TestCase):
     def test_timeline_json_and_markdown_do_not_echo_body(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
-            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
+            run_cli(base, "init", "--agent", "operator@example", "--agent", "worker@example")
             sent = run_cli(
                 base,
                 "send",
-                "--from", "lulu@kamac",
-                "--to", "zhiwei@known-blocks1",
+                "--from", "worker@example",
+                "--to", "operator@example",
                 "--type", "request",
                 "--subject", "timeline",
                 "--body", "SECRET_TIMELINE_BODY",
@@ -387,8 +387,8 @@ class A2ARelayV02CLITest(unittest.TestCase):
     def test_doctor_reports_malformed_processing_without_failure_exit(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
-            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
-            bad = base / "processing" / "lulu_kamac" / "bad.json"
+            run_cli(base, "init", "--agent", "operator@example", "--agent", "worker@example")
+            bad = base / "processing" / "worker_example" / "bad.json"
             bad.write_text("{not valid json", encoding="utf-8")
 
             result = run_cli(base, "doctor")
@@ -399,22 +399,22 @@ class A2ARelayV02CLITest(unittest.TestCase):
             self.assertEqual(report["contacts_count"], 2)
             self.assertEqual(report["malformed_json_count"], 1)
             self.assertEqual(report["malformed_json_counts"]["processing"], 1)
-            self.assertEqual(report["processing_counts"]["lulu_kamac"], 1)
+            self.assertEqual(report["processing_counts"]["worker_example"], 1)
 
     def test_threads_tolerate_legacy_naive_event_timestamp(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
-            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
+            run_cli(base, "init", "--agent", "operator@example", "--agent", "worker@example")
             events = base / "events" / "2026-05-08.jsonl"
             events.write_text(json.dumps({
                 "event_id": "evt_legacy",
                 "event_type": "sent",
                 "timestamp": "2026-05-08T00:00:00",
-                "actor": "lulu@kamac",
+                "actor": "worker@example",
                 "message_id": "msg_legacy",
                 "thread_id": "thread_legacy",
-                "from": "lulu@kamac",
-                "to": "zhiwei@known-blocks1",
+                "from": "worker@example",
+                "to": "operator@example",
             }) + "\n", encoding="utf-8")
 
             result = run_cli(base, "threads", "--days", "9999")
@@ -426,9 +426,9 @@ class A2ARelayV02CLITest(unittest.TestCase):
     def test_oversized_body_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "mailbox"
-            run_cli(base, "init", "--agent", "zhiwei@known-blocks1", "--agent", "lulu@kamac")
-            run_cli(base, "send", "--from", "lulu@kamac", "--to", "zhiwei@known-blocks1", "--type", "request", "--subject", "big", "--body", "x" * 20)
-            result = load_json(run_cli(base, "poll", "--agent", "zhiwei@known-blocks1", "--allow-from", "lulu@kamac", "--max-body-chars", "10").stdout)
+            run_cli(base, "init", "--agent", "operator@example", "--agent", "worker@example")
+            run_cli(base, "send", "--from", "worker@example", "--to", "operator@example", "--type", "request", "--subject", "big", "--body", "x" * 20)
+            result = load_json(run_cli(base, "poll", "--agent", "operator@example", "--allow-from", "worker@example", "--max-body-chars", "10").stdout)
             self.assertEqual(result["count"], 1)
             self.assertFalse(result["results"][0]["ok"])
             self.assertIn("body too large", result["results"][0]["error"])

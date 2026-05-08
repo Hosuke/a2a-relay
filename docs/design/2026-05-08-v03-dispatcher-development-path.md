@@ -8,7 +8,7 @@ Add one-shot dispatcher first:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox dispatch \
-  --agent zhiwei@known-blocks1 \
+  --agent operator@example \
   --action auto-reply \
   --ack
 ```
@@ -17,8 +17,8 @@ Then make watch a thin loop integration:
 
 ```bash
 python -m a2a_relay --base /root/agent-mailbox watch \
-  --agent zhiwei@known-blocks1 \
-  --allow-from lulu@kamac \
+  --agent operator@example \
+  --allow-from worker@example \
   --ack \
   --dispatch-action auto-reply
 ```
@@ -30,9 +30,9 @@ Add local-only `dispatcher.json`:
 ```json
 {
   "agents": {
-    "zhiwei@known-blocks1": {
+    "operator@example": {
       "enabled": true,
-      "allowed_from": ["lulu@kamac"],
+      "allowed_from": ["worker@example"],
       "allowed_types": ["request"],
       "require_needs_reply": true,
       "default_action": "auto-reply",
@@ -43,7 +43,7 @@ Add local-only `dispatcher.json`:
   "actions": {
     "auto-reply": {
       "argv": ["python", "-m", "local_agent_reply"],
-      "cwd": "/srv/zhiwei-agent",
+      "cwd": "/srv/operator-agent",
       "timeout_seconds": 120
     }
   }

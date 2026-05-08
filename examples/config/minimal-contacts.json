@@ -1,11 +1,11 @@
 {
   "contacts": {
-    "lulu@kamac": {
-      "id": "lulu@kamac",
-      "display_name": "lulu",
-      "aliases": ["lulu"],
+    "worker@example": {
+      "id": "worker@example",
+      "display_name": "worker",
+      "aliases": ["worker"],
       "transport": "filesystem",
-      "inbox": "/root/agent-mailbox/inbox/lulu_kamac",
+      "inbox": "/root/agent-mailbox/inbox/worker_example",
       "allow_from": [],
       "allowed_types": [
         "alert",
@@ -19,19 +19,19 @@
       ],
       "trust_level": "trusted-filesystem",
       "notes": "example private contact",
-      "safe_name": "lulu_kamac"
+      "safe_name": "worker_example"
     },
-    "zhiwei@known-blocks1": {
-      "id": "zhiwei@known-blocks1",
-      "display_name": "zhiwei",
-      "aliases": ["zhiwei"],
+    "operator@example": {
+      "id": "operator@example",
+      "display_name": "operator",
+      "aliases": ["operator"],
       "transport": "filesystem",
-      "inbox": "/root/agent-mailbox/inbox/zhiwei_known-blocks1",
-      "allow_from": ["lulu@kamac"],
+      "inbox": "/root/agent-mailbox/inbox/operator_example",
+      "allow_from": ["worker@example"],
       "allowed_types": ["request", "reply", "status", "note"],
       "trust_level": "trusted-filesystem",
       "notes": "allow_from and allowed_types are metadata unless active policy enforces them",
-      "safe_name": "zhiwei_known-blocks1"
+      "safe_name": "operator_example"
     }
   }
 }
