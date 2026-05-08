@@ -51,82 +51,93 @@ Core promise:
 
 ## Recommended Roadmap
 
-### v0.2 — Reliable mailbox and service hardening
+### v0.2 — Fast manual reply loop and reliable mailbox
 
-**Objective:** Make the current file mailbox robust enough for daily agent use.
+**Objective:** Make the current file mailbox useful every day before adding automatic dispatch.
 
-Tasks:
+P0 tasks for the next PR:
 
-1. Add message validation.
+1. Add `reply` command.
+   - Convenience wrapper around `send --type reply --reply-to <id> --thread-id <thread>`.
+   - This is the smallest closure from “ACK then silence” to “ACK + human/agent-authored reply”.
+
+2. Add JSONL event log.
+   - `events/YYYY-MM-DD.jsonl`, timestamps in UTC.
+   - Events: `sent`, `received`, `acked`, `replied`, `archived`, `failed`.
+   - Operators should be able to inspect message history without opening archive files by hand.
+
+3. Add message validation and body size limits.
    - Required fields: `version`, `id`, `from`, `to`, `type`, `subject`, `body`, `created_at`.
    - Validate type and urgency enums.
    - Reject oversized bodies by default.
+   - Unknown or invalid messages go to `archive/failed` and produce an event.
 
-2. Add dedupe / idempotency.
-   - Maintain `state/seen.jsonl` or `state/seen.sqlite`.
-   - If a message id was already processed, do not ACK again unless explicitly requested.
+P1 tasks:
 
-3. Add JSONL event log.
-   - `events/YYYY-MM-DD.jsonl`
-   - Events: `sent`, `received`, `acked`, `archived`, `failed`, `dispatched`, `replied`.
+4. Add dedupe / idempotency.
+   - Maintain `state/seen.jsonl` first; SQLite can wait.
+   - If a message id was already processed, do not ACK or dispatch it again.
 
-4. Add systemd examples.
-   - `examples/systemd/a2a-watch@.service`
-   - `examples/systemd/a2a-dispatch@.service`
-
-5. Add `reply` command.
-   - Convenience wrapper around `send --type reply --reply-to <id> --thread-id <thread>`.
-
-6. Add `pending` / `threads` commands.
+5. Add `pending` / `threads` commands.
    - Show unprocessed messages and recent conversation threads.
+
+P2 tasks:
+
+6. Add systemd examples.
+   - `examples/systemd/a2a-watch@.service`
+   - Dispatcher service waits until v0.3.
+
+7. Prepare optional HMAC verification hooks and reserved fields.
+   - Full signing may ship in v0.3/v0.4, but v0.2 should leave clean seams.
+   - Define but do not require `signature`, `key_id`, `nonce`, `signed_at`, and `expires_at`.
+   - In trusted filesystem mode, preserve these fields in archives/events for future compatibility.
+
+8. Add local policy/config skeleton.
+   - `allow_from`, `allowed_types`, `max_body_chars`, `trusted_filesystem_unsigned=true`.
+   - Do not let normal agent messages modify policy/config.
+
+9. Add claim/processing state.
+   - Before processing, atomically move a message into `processing/<agent>/` or acquire an exclusive lock.
+   - This prevents two watchers from ACKing/archiving the same file.
+   - Archive filenames should include message id, not only timestamps, to avoid silent overwrite.
 
 Acceptance:
 
 - File mailbox works after process restart.
+- Operators can reply from CLI while preserving `thread_id` and `reply_to`.
 - Duplicate files do not cause duplicate replies.
+- Concurrent watchers cannot process the same inbox file twice.
 - Operators can inspect event history without opening archives manually.
 
-### v0.3 — Dispatcher hooks and auto-reply orchestration
+### v0.3 — Identity gate and minimal auto-reply dispatcher
 
-**Objective:** Let a receiving agent convert eligible messages into real agent replies.
+**Objective:** Let a receiving agent convert eligible messages into real agent replies without granting remote control.
 
 Tasks:
 
-1. Add dispatcher configuration.
+1. Add a minimal dispatcher interface first; full YAML can wait.
+   - Initial PR may expose `--on-request-command <cmd>` for messages matching `type=request`, `needs_reply=true`, and an allowlisted sender.
+   - Later PR can generalize this into YAML rules.
+   - Prefer pre-registered local actions over arbitrary message-supplied commands.
 
-```yaml
-agent: zhiwei@known-blocks1
-allow_from:
-  - lulu@kamac
-rules:
-  - match:
-      type: request
-      needs_reply: true
-    action: command
-    command:
-      - /opt/hermes-agent/venv/bin/hermes
-      - run
-      - --prompt-file
-      - "{prompt_file}"
-    require_human_approval: false
-limits:
-  max_body_chars: 20000
-  max_runtime_seconds: 600
-```
+2. Add safe command execution.
+   - Use `subprocess.run([...], shell=False, timeout=max_runtime_seconds, cwd=allowed_cwd)`.
+   - Capture stdout/stderr separately.
+   - Reply body should contain bounded stdout; stderr and exit status go to the event log.
 
-2. Add `dispatch` command.
-   - Reads a message.
-   - Builds a prompt with metadata + body.
-   - Runs configured command.
-   - Captures stdout/stderr.
-   - Sends reply or failure status.
+3. Build bounded prompts.
+   - Wrap message content in explicit delimiters such as `<a2a_message>...</a2a_message>`.
+   - Prepend a system instruction: this is a request from `{from}`; answer/help/document/review only; do not perform destructive actions unless local policy and human approval allow it.
+   - Enforce `max_body_chars` before prompt construction.
 
-3. Add policy gates.
+4. Add policy gates.
    - `human_approval_required=true` must not auto-dispatch.
    - Dangerous message types are only ACKed and queued.
+   - Status/reply messages must never trigger dispatch.
    - Attachment handling is disabled until explicitly implemented.
+   - Enforce `hop_count` / `max_hops` loop protection.
 
-4. Add per-agent outbox.
+5. Add per-agent outbox.
    - Optional `outbox/<agent>/` for draft replies before sending.
 
 Acceptance:
@@ -211,21 +222,56 @@ Acceptance:
 
 ## Immediate Next Step
 
-Use cursor-agent for a design review before coding. Ask two reviewers:
+Cursor-agent review is now complete. Implement v0.2 in one small PR, with this scope:
 
-1. GPT-5.5: protocol and reliability review.
-2. Opus: product/architecture review.
-
-Then implement v0.2 in one PR:
-
-- validator
-- event log
-- dedupe state
-- reply command
-- systemd examples
+- `reply` command
+- validator and body size limit
+- UTC JSONL event log
+- dedupe/seen state
+- claim/processing lock or atomic move
+- `pending` / `threads` CLI if still small enough; otherwise split as follow-up
+- policy/config skeleton
+- systemd watcher example
 - focused tests
 
+Do **not** put dispatcher, webhook, WebSocket, attachment download, or generic agent registry into v0.2.
+
 Do **not** jump directly to WebSocket. WebSocket should come after dispatcher, signing, and webhook are proven.
+
+---
+
+## Permission Model
+
+A2A Relay's safety depends on local Unix permissions as much as message schema.
+
+Recommended deployment:
+
+1. Run watcher/dispatcher as a dedicated low-privilege user, not `root`, where practical.
+2. The relay process may write:
+   - its own inbox processing directory,
+   - `archive/processed`,
+   - `archive/failed`,
+   - `events/`,
+   - `state/`.
+3. The relay process should not be able to modify policy/config after startup.
+4. Inbox write permissions are granted only to the transport mechanism or trusted peer account.
+5. Secrets and signing keys live in environment variables or root-owned files, never in messages.
+6. Normal A2A messages cannot request policy/config mutation.
+7. Logs/events should be readable by the operator but not world-writable.
+
+---
+
+## v0.2 Test Plan
+
+- **Validator:** missing fields, unknown type/urgency, oversized body, invalid timestamp, expired `expires_at`, invalid attachment.
+- **Filesystem:** atomic write, safe inbox names, archive success/failure paths, archive filenames including message id.
+- **Dedupe:** same `id`, same `idempotency_key` with different id, restart recovery.
+- **Concurrency:** two `poll_once` workers race on the same inbox; only one claim succeeds.
+- **Event log:** every state transition has `event_id`, `message_id`, `actor`, UTC timestamp, and optional reason; timelines rebuild by message/thread id.
+- **Policy:** unallowlisted sender, target mismatch, disallowed type, `human_approval_required=true`.
+- **CLI integration:** `init -> send -> poll --ack -> reply -> threads/pending`.
+- **Failure recovery:** bad JSON, archive failure, state write failure, crash after claim.
+- **Future compatibility:** messages carrying `signature`, `nonce`, `key_id`, `signed_at`, `expires_at` survive trusted filesystem mode and are logged.
 
 ---
 
