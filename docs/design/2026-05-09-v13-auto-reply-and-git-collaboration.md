@@ -9,26 +9,36 @@ Authors: operator design lead, agent-assisted
 ## 1. Motivation
 
 A2A Relay v0.3 ships a policy-gated dispatcher that runs pre-registered local
-commands. The remaining gap is end-to-end autonomous collaboration: two agent
-pairs should be able to exchange bounded requests and produce real replies
-without human intervention for low-risk threads, while an orchestration layer
-coordinates design, implementation, and review through GitHub PRs.
+commands. The v1.3 gap is narrow private automation: allowlisted agent pairs
+should be able to exchange bounded requests and produce real replies for
+low-risk threads, while preserving auditability and keeping public integrations
+out of the automatic loop.
 
-This document designs v1.3 with five capabilities:
+This document designs v1.3 around a narrow release core plus explicit
+post-v1.3 design notes:
 
-1. **Safe automatic replies** between two named agent pairs.
-2. **GitHub-based design and PR interaction** workflow.
-3. **Multi-cursor-agent orchestration** (Opus 4.6 implementation, GPT-5.5
-   review).
-4. **Staged safety levels** from receipt watcher to constrained one-shot agent.
-5. **Public/private boundary** enforcement.
+1. **Safe automatic replies** between private, allowlisted agent pairs.
+2. **Staged safety levels** from receipt watcher to constrained one-shot agent.
+3. **Public/private boundary** enforcement for docs, examples, and runtime logs.
+4. **Protocol and audit hooks** that make later GitHub and multi-agent work
+   possible without shipping that automation in v1.3.
+5. **Postponed design sketches** for GitHub PR interaction and multi-agent
+   orchestration. These sketches are not v1.3 release commitments.
 
 ### Versioning note
 
 The jump from v0.3 to v1.3 reflects three maturity stages planned but not
 individually released (v1.0 stable mailbox, v1.1 multi-agent watcher, v1.2
 task delegation runtime). v1.3 is the first milestone that enables autonomous
-agent-to-agent collaboration end to end.
+private agent-to-agent collaboration end to end.
+
+### Release boundary
+
+v1.3 ships only private-contact, policy-gated automation. Public GitHub
+automation, automatic PR comments, code changes from PR text, multi-agent write
+orchestration, recursive delegation, automatic pushes/merges, and public
+webhook ingestion are **postponed** until later releases with separate threat
+models and approval gates.
 
 ---
 
@@ -37,12 +47,13 @@ agent-to-agent collaboration end to end.
 ### In scope
 
 - Policy schema changes for multi-pair auto-reply.
-- Dispatcher `agent_runner` action type backed by cursor-agent or equivalent.
-- GitHub webhook/CLI bridge for PR-driven design review.
-- Orchestrator config for multi-model agent coordination.
+- Dispatcher `agent_runner` action type only for constrained private runs.
+- Read-only or draft-only hooks needed to support future GitHub review flows.
 - Five staged safety levels with clear promotion criteria.
 - CLI UX for configuring, dry-running, and monitoring auto-reply pairs.
 - Acceptance tests, failure modes, and rollback plan.
+- Documentation that clearly separates v1.3 release scope from postponed
+  GitHub and multi-agent write automation.
 
 ### Out of scope
 
@@ -51,6 +62,11 @@ agent-to-agent collaboration end to end.
 - Browser timeline UI (v0.6).
 - Group chat semantics.
 - Arbitrary remote command execution.
+- Public GitHub webhook automation.
+- Automatic posting of agent-generated content to GitHub.
+- GitHub-triggered code edits or branch pushes.
+- Automatic merges, releases, force pushes, restarts, migrations, or deletes.
+- Multi-agent write orchestration and recursive delegation.
 
 ---
 
@@ -189,57 +205,61 @@ destructive verbs, or org-specific terms.
 
 ---
 
-## 5. GitHub-Based Design/PR Interaction Workflow
+## 5. GitHub-Based Design/PR Interaction Workflow (Postponed)
+
+This section is a post-v1.3 design sketch. v1.3 may record metadata that links a
+private mailbox thread to a PR, but it must not automatically post to GitHub,
+edit code from PR comments, merge PRs, or treat GitHub text as trusted input.
 
 ### 5.1 Overview
 
 ```
- Agent A (alpha)           GitHub               Agent B (bravo)
- ─────────────────    ─────────────────    ─────────────────
- drafts design doc  → pushes branch       
-                      opens PR            → receives PR review request
-                                            via A2A message
-                      ← posts review        
- reads review       ← A2A notification   
- addresses comments → pushes fixup        
-                      ← CI passes          
-                      merge                
+ Agent A (alpha)       Human-approved bridge       GitHub / Agent B
+ ─────────────────     ─────────────────────       ────────────────
+ drafts private note → proposes PR metadata
+                       operator approves       → opens PR or requests review
+ receives note      ← relays approved summary
+ operator approves  → posts or pushes outside the automatic v1.3 loop
 ```
 
 ### 5.2 A2A ↔ GitHub Bridge
 
-A new action type `github_pr` in `dispatcher.json` connects A2A threads to
-GitHub PRs:
+A future action type `github_pr` in `dispatcher.json` could connect A2A threads
+to GitHub PRs after signature verification, replay protection, repo/actor
+allowlists, and human approval gates exist:
 
 ```json
 {
   "type": "github_pr",
   "repo": "owner/a2a-relay",
   "base_branch": "main",
-  "auto_create_pr": true,
+  "mode": "metadata_only",
+  "auto_create_pr": false,
+  "human_approval_required": true,
   "pr_title_template": "[A2A] {subject}",
-  "pr_body_from_message": true,
+  "pr_body_from_message": false,
   "reviewers": ["bravo-bot"],
   "labels": ["a2a-auto"]
 }
 ```
 
-#### Workflow steps
+#### Future workflow steps
+
+These steps are postponed. They describe the shape of a later release, not the
+v1.3 shipping behavior.
 
 1. **Design request** arrives as a `type=request` A2A message with
    `capabilities_requested: ["github_pr"]`.
-2. The dispatcher creates a feature branch named
+2. The controller proposes a feature branch name:
    `a2a/{thread_id_short}/{safe_subject}`.
-3. The agent runner (Opus 4.6) writes design doc / code changes to the
-   branch.
-4. The dispatcher opens a PR using `gh pr create`.
+3. The agent runner drafts a private design note or review summary.
+4. A human-approved controller opens a PR using `gh pr create`.
 5. An A2A `status` message is sent back with the PR URL and status.
-6. The review agent (GPT-5.5) receives a review-request A2A message,
-   fetches the PR diff, and posts a GitHub review.
-7. Review comments are relayed back as A2A `note` messages.
-8. The implementation agent addresses comments, pushes, and sends a status
-   update.
-9. When CI passes and review approves, a final `reply` closes the thread.
+6. The review agent receives a review-request A2A message and drafts a review
+   for human approval.
+7. Human-approved review comments may be relayed back as A2A `note` messages.
+8. Any implementation changes, pushes, merges, or closeout replies require
+   explicit human approval outside v1.3 automation.
 
 ### 5.3 PR Metadata in Messages
 
@@ -256,7 +276,11 @@ Messages related to a PR carry structured metadata in the body:
 
 This is body content, not schema fields, preserving v1 schema compatibility.
 
-### 5.4 CLI for GitHub Integration
+### 5.4 CLI for GitHub Integration (Illustrative, Postponed)
+
+The following commands are illustrative. They should not be implemented as
+automatic v1.3 behavior unless they are read-only/draft-only and gated by human
+approval before any public GitHub write.
 
 ```bash
 # Create a design branch and PR from an A2A request
@@ -276,7 +300,12 @@ a2a-relay --base $BASE github sync-status \
 
 ---
 
-## 6. Multi-Cursor-Agent Orchestration
+## 6. Multi-Cursor-Agent Orchestration (Postponed Beyond Draft-Only Runs)
+
+v1.3 may define the policy and audit vocabulary for orchestration, but
+multi-agent write workflows are postponed. Any v1.3 agent run must be private,
+bounded by local policy, and limited to read-only or draft-only behavior unless
+an operator explicitly approves the write outside the automatic loop.
 
 ### 6.1 Two-Model Architecture
 
@@ -293,9 +322,10 @@ a2a-relay --base $BASE github sync-status \
               └─────────────┘   └─────────────┘
 ```
 
-- **Opus 4.6** handles implementation: writing code, docs, config changes,
-  running tests. It operates via `cursor-agent` with write permissions
-  bounded by `allowed_capabilities` and `profile`.
+- **Implementation agent** handles draft work only in v1.3: reading, planning,
+  or preparing proposed changes under a bounded profile. Writing code, docs,
+  config changes, or pushing branches is postponed unless an operator approves
+  the run outside the automatic loop.
 - **GPT-5.5** handles review: reading diffs, evaluating correctness, safety,
   and style. It operates in read-only mode with no tool-call write
   permissions.
@@ -304,10 +334,10 @@ a2a-relay --base $BASE github sync-status \
 
 ```
 1. Incoming request → policy gate → dispatch_eligible
-2. Opus 4.6 agent_runner produces implementation (branch + commit)
-3. Implementation output → review gate → GPT-5.5 review
-4. If approved → send reply + PR ready
-5. If changes requested → Opus 4.6 re-run (max 2 iterations)
+2. Agent runner produces read-only findings or a draft reply
+3. Draft output → review/redaction gate
+4. If approved by policy → send private reply
+5. If changes requested → queue for human or re-run once under the same policy
 6. If still failing → queue for human with review notes
 ```
 
@@ -472,8 +502,11 @@ with bounded tool calls.
 
 ### Level 5: `constrained_agent_with_writes`
 
-Agent runner may perform bounded writes (create files, push commits) under
-`ops-review` profile. Only reachable after Level 4 is stable for 48+ hours.
+Postponed for v1.3. Agent runner may eventually perform bounded writes (create
+files, push commits) under an `ops-review` profile, but this level must remain
+disabled in v1.3 automatic promotion. It is only reachable in a later release
+after Level 4 is stable and write-specific approval, worktree, audit, and
+rollback controls are implemented.
 
 **Acceptance criteria**:
 - Level 4 criteria plus:
@@ -514,9 +547,9 @@ Promotion writes a `safety_level_changed` event. Demotion is always instant.
 | `safety-level show`              | Show current safety level for an agent     |
 | `safety-level promote`           | Promote with acceptance check              |
 | `safety-level demote`            | Demote immediately                         |
-| `github create-branch`           | Create feature branch for A2A thread       |
-| `github relay-review`            | Relay GitHub review as A2A note            |
-| `github sync-status`             | Sync PR status to A2A thread               |
+| `github create-branch`           | Post-v1.3: human-approved branch creation  |
+| `github relay-review`            | Post-v1.3: human-approved review relay     |
+| `github sync-status`             | Post-v1.3: metadata-only PR status sync    |
 | `dispatch --dry-run`             | Preview dispatch decision without running  |
 | `dispatch --action agent-reply`  | Dispatch via agent_runner                  |
 
@@ -561,6 +594,11 @@ Output:
 
 ## 9. Implementation Milestones
 
+Release scope warning: Milestones 1-2 and the read-only/draft-only subset of
+Milestone 3 are v1.3 candidates. Milestones 4-6 are design backlog unless each
+item is narrowed to private, read-only/draft-only behavior with explicit human
+approval for external writes.
+
 ### Milestone 1: Policy schema v2 (Week 1)
 
 - Add new `dispatcher.json` fields with backward-compatible defaults.
@@ -591,7 +629,7 @@ Output:
 - Add `profile` injection into agent prompt.
 - Tests: agent runner invocation, sandbox, fallback, timeout.
 
-### Milestone 4: Review pass (Week 3–4)
+### Milestone 4: Review pass (Post-v1.3 unless draft-only)
 
 - Add `review` section processing in dispatch pipeline.
 - Implement `on_reply_before_send` trigger: after Opus 4.6 produces output,
@@ -601,7 +639,7 @@ Output:
 - Queue for human if iterations exhausted.
 - Tests: review approve, review reject, iteration cap, human queue.
 
-### Milestone 5: GitHub PR bridge (Week 4–5)
+### Milestone 5: GitHub PR bridge (Post-v1.3)
 
 - Add `github` subcommand group.
 - Implement `create-branch`, `relay-review`, `sync-status`.
@@ -610,10 +648,12 @@ Output:
 - Implement review relay (GitHub → A2A note).
 - Tests: branch creation, PR metadata parsing, review relay.
 
-### Milestone 6: Integration and staged rollout (Week 5–6)
+### Milestone 6: Integration and staged rollout (Post-v1.3 for GitHub/write flows)
 
-- End-to-end test: request → Opus 4.6 implement → GPT-5.5 review → reply.
-- End-to-end test: request → branch → PR → review → merge → reply.
+- End-to-end test: request → read-only/draft agent output → review/redaction
+  gate → private reply.
+- Post-v1.3 only: end-to-end test for request → branch → PR → review → merge
+  → reply.
 - Staged promotion: manual → receipt → ack_only → echo_dispatch →
   constrained_agent for each agent pair.
 - `doctor` enhancements for v1.3 health checks.
@@ -656,7 +696,8 @@ Output:
 23. Thread with 6 replies → 6th dispatch blocked.
 24. Rapid-fire 15 requests in 1 minute → rate limit triggers.
 25. Keyword `"DROP TABLE"` in body → queued for human.
-26. Agent runner produces a branch and PR → review → approved → merged.
+26. Post-v1.3 only: agent runner produces a branch and PR → review → approved
+    → merged.
 
 ### Smoke tests (CI, `.github/workflows/ci.yml`)
 
@@ -763,6 +804,10 @@ systemctl stop a2a-watch@bravo_example.service
 ---
 
 ## 14. Event Types Added in v1.3
+
+The non-GitHub event types are v1.3 candidates. GitHub events are reserved names
+for post-v1.3 work unless the implementation is metadata-only and cannot write
+to GitHub without human approval.
 
 | Event type                    | When                                              |
 |-------------------------------|---------------------------------------------------|
