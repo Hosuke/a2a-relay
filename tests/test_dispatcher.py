@@ -29,6 +29,7 @@ from a2a_relay.dispatcher import (
 
 def make_dispatcher_config(base: Path, agent_id: str, action_name: str, argv: list,
                            *, allowed_from: list | None = None,
+                           allowed_types: list[str] | None = None,
                            stdout_max_chars: int = 12000,
                            timeout_seconds: int = 120,
                            cwd: str | None = None) -> None:
@@ -37,7 +38,7 @@ def make_dispatcher_config(base: Path, agent_id: str, action_name: str, argv: li
             agent_id: {
                 "enabled": True,
                 "allowed_from": [] if allowed_from is None else allowed_from,
-                "allowed_types": ["request"],
+                "allowed_types": ["request"] if allowed_types is None else allowed_types,
                 "require_needs_reply": True,
                 "default_action": action_name,
                 "max_body_chars": 20000,
@@ -179,6 +180,65 @@ class TestDispatcherPolicyGate(unittest.TestCase):
         self.assertFalse(result["dispatched"])
         self.assertEqual(result["reason"], "target mismatch: someone_else != operator@example")
         self.assertEqual(list(inbox_dir(base, "worker@example").glob("*.json")), [])
+
+    def test_note_dispatches_when_policy_allows_note(self):
+        base = self._setup_mailbox()
+        make_dispatcher_config(base, "operator@example", "echo",
+                               [sys.executable, "-c", ECHO_SCRIPT],
+                               allowed_from=["worker@example"],
+                               allowed_types=["request", "note"])
+        msg = make_request_msg(msg_id="msg_note_001")
+        msg["type"] = "note"
+
+        result = dispatch_message(base, msg, "operator@example")
+
+        self.assertTrue(result["dispatched"])
+        self.assertTrue(result["success"])
+        reply = json.loads(Path(result["reply_path"]).read_text(encoding="utf-8"))
+        self.assertEqual(reply["type"], "reply")
+        self.assertEqual(reply["reply_to"], "msg_note_001")
+        self.assertIn("reply: got it", reply["body"])
+
+    def test_note_skipped_when_policy_does_not_allow_note(self):
+        base = self._setup_mailbox()
+        make_dispatcher_config(base, "operator@example", "echo",
+                               [sys.executable, "-c", ECHO_SCRIPT],
+                               allowed_from=["worker@example"],
+                               allowed_types=["request"])
+        msg = make_request_msg(msg_id="msg_note_002")
+        msg["type"] = "note"
+
+        result = dispatch_message(base, msg, "operator@example")
+
+        self.assertFalse(result["dispatched"])
+        self.assertEqual(result["reason"], "type_note_not_allowed")
+        self.assertEqual(list(inbox_dir(base, "worker@example").glob("*.json")), [])
+
+    def test_empty_allowed_types_rejected(self):
+        base = self._setup_mailbox()
+        make_dispatcher_config(base, "operator@example", "echo",
+                               [sys.executable, "-c", ECHO_SCRIPT],
+                               allowed_from=["worker@example"],
+                               allowed_types=[])
+        msg = make_request_msg()
+
+        result = dispatch_message(base, msg, "operator@example")
+
+        self.assertFalse(result["dispatched"])
+        self.assertEqual(result["reason"], "allowed_types_required")
+
+    def test_invalid_allowed_types_rejected(self):
+        base = self._setup_mailbox()
+        make_dispatcher_config(base, "operator@example", "echo",
+                               [sys.executable, "-c", ECHO_SCRIPT],
+                               allowed_from=["worker@example"],
+                               allowed_types=["request", 123])
+        msg = make_request_msg()
+
+        result = dispatch_message(base, msg, "operator@example")
+
+        self.assertFalse(result["dispatched"])
+        self.assertEqual(result["reason"], "invalid_allowed_types_config")
 
     def test_reply_type_skipped(self):
         base = self._setup_mailbox()
