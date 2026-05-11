@@ -61,8 +61,15 @@ def check_policy_gate(base: Path, msg: dict, agent_id: str, config: dict) -> tup
     msg_type = msg.get("type", "")
     if msg_type in ("reply", "status", "heartbeat"):
         return False, f"type_{msg_type}_never_dispatched"
-    if msg_type != "request":
-        return False, f"type_{msg_type}_not_request"
+
+    allowed_types = policy.get("allowed_types", ["request"])
+    if not isinstance(allowed_types, list) or not allowed_types:
+        return False, "allowed_types_required"
+    if not all(isinstance(item, str) and item for item in allowed_types):
+        return False, "invalid_allowed_types_config"
+    allowed_type_set = set(allowed_types)
+    if msg_type not in allowed_type_set:
+        return False, f"type_{msg_type}_not_allowed"
 
     if not msg.get("needs_reply", False):
         return False, "needs_reply_is_false"
